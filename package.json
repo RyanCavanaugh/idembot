@@ -1,0 +1,25 @@
+{
+  "name": "idembot",
+  "version": "1.0.0",
+  "description": "*idembot* performs is a *bot* for performing *idempotent* actions on GitHub issues and pull requests.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RyanCavanaugh/idembot.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/RyanCavanaugh/idembot/issues"
+  },
+  "homepage": "https://github.com/RyanCavanaugh/idembot#readme",
+  "dependencies": {
+    "@types/node": "^7.0.8",
+    "@types/request": "0.0.41",
+    "request": "^2.81.0"
+  }
+}
