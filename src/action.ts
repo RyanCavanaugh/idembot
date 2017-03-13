@@ -3,8 +3,10 @@
 import GithubAPIClient from './client';
 import { addAction } from './actionRunner';
 
+import { Issue } from './github';
+
 export type Logger = {};
-export type OnChangeHandler = (item: GitHubAPI.Issue) => void;
+export type OnChangeHandler = (item: Issue) => void;
 
 export type ActionExecuteInfo = {
     client: GithubAPIClient,
@@ -32,13 +34,13 @@ export abstract class BaseAction implements IActionImplementation {
         this.beforeChangeHandlers.push(handler);
     }
 
-    protected async fireOnBeforeChange(issue: GitHubAPI.Issue) {
+    protected async fireOnBeforeChange(issue: Issue) {
         for (const before of this.beforeChangeHandlers) {
             await before(issue);
         }
     }
 
-    protected async fireOnChanged(issue: GitHubAPI.Issue) {
+    protected async fireOnChanged(issue: Issue) {
         for (const after of this.afterChangeHandlers) {
             await after(issue);
         }
@@ -47,40 +49,9 @@ export abstract class BaseAction implements IActionImplementation {
     public abstract async execute(info: ActionExecuteInfo): Promise<void>;
 }
 
-/**
- * Adds a label to an issue or PR.
- */
-export function addLabel(issue: GitHubAPI.Issue, ...labels: string[]) {
-    return addAction(new Labels.Add(issue, labels));
-}
-/**
- * Adds labels to an issue or PR.
- */
-export function addLabels(issue: GitHubAPI.Issue, labels: string[]) {
-    return addAction(new Labels.Add(issue, labels));
-}
-/**
- * Deletes a label from an issue.
- */
-export function removeLabel(issue: GitHubAPI.Issue, ...labels: string[]) {
-    return addAction(new Labels.Remove(issue, labels));
-}
-/**
- * Deletes labels from an issue.
- */
-export function removeLabels(issue: GitHubAPI.Issue, labels: string[]) {
-    return addAction(new Labels.Remove(issue, labels));
-}
-/**
- * Sets, exactly, which labels are on an issue
- */
-export function setLabels(issue: GitHubAPI.Issue, ...labels: string[]) {
-    return addAction(new Labels.Set(issue, labels));
-}
-
-namespace Labels {
-    abstract class Base extends BaseAction {
-        constructor(public issue: GitHubAPI.Issue, public labels: string[]) {
+export namespace Labels {
+    export abstract class Base extends BaseAction {
+        constructor(public issue: Issue, public labels: string[]) {
             super();
         }
 

@@ -1,3 +1,5 @@
+import * as Wrapped from './github';
+
 export interface CommandLineOptions {
     dry: boolean;
 }
@@ -5,7 +7,7 @@ export interface CommandLineOptions {
 export interface SetupOptions {
     repos: GitHubAPI.RepoReference[];
     rules: {
-        [key: string]: (issue: GitHubAPI.Issue) => void | Promise<any>;
+        [key: string]: (issue: Wrapped.Issue) => void | Promise<any>;
     }
 }
 

@@ -1,7 +1,10 @@
 import { Actions, SetupOptions } from 'idembot';
+import * as Bot from 'idembot';
 
-function addBugLabel(issue: GitHubAPI.Issue) {
-    issue.addComment();
+function addBugLabel(issue: Bot.Issue) {
+    if (issue.user.login === 'RyanCavanaugh') {
+        issue.removeLabel('bug');
+    }
 }
 
 const setup: SetupOptions = {

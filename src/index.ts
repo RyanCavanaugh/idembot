@@ -2,9 +2,10 @@
 
 import * as Actions from './action';
 import APIClient from './client';
-import { apply } from  './issue-proto';
 import { runActions } from  './actionRunner';
 import { SetupOptions, CommandLineOptions } from './options';
+
+export { User, Issue, Milestone, Label } from './github';
 
 async function run(opts: SetupOptions & CommandLineOptions, oauthToken: string) {
     if (opts === null) {
@@ -24,12 +25,10 @@ async function run(opts: SetupOptions & CommandLineOptions, oauthToken: string) 
         console.log('Fetching repo activity');
         const issueResults = await c.fetchChangedIssues(repo);
         for (const issue of issueResults.issues) {
-            const helpedIssue = apply(issue);
-
             for (const ruleName of ruleNames) {
                 const rule = opts.rules[ruleName];
                 console.log(`Inovking rule ${ruleName}`);
-                const result = rule(helpedIssue);
+                const result = rule(issue);
                 if (result !== undefined) {
                     await result;
                 }
@@ -44,7 +43,5 @@ async function run(opts: SetupOptions & CommandLineOptions, oauthToken: string) 
 export { 
     Actions,
     run,
-
-    apply as _addIssueHelpers,
     SetupOptions
 };
