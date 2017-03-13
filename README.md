@@ -32,17 +32,12 @@ To write a rule, write a function accepting a `Github.Issue` or `Github.PR`:
 function acceptIssue(issue: Github.Issue) {
     // Check who wrote the issue
     if (issue.author.name === "steve_the_cto") {
-        // Steve! Label this high priority
-        const label = new AddLabelAction("High Priority");
-        // Email me when this happens
-        label.onChange(() => email_me(issue.title, issue.url));
-        return label;
+        // Steve! Label this high priority and email the first time that happens
+        Actions.addLabel("High Priority").onChange(() => email_me(issue.title, issue.url));
     } else {
         // Normal users; move to later milestone and assign to support
-        return [
-            new SetMilestoneAction("Later"),
-            new SetAssigneeAction("jesse_the_engineer")
-        ];
+        Actions.setMilestone("Later");
+        Actions.setAssignee("jesse_the_engineer");
     }
 }
 ```
@@ -53,5 +48,33 @@ Actions fire events depending on whether or not they did anything.
 The `onChanged` function takes a callback that's invoked if the action caused a change.
 You can use this to trigger one-time side effects.
 
+# Action Reference
 
+## Labels
+
+### Adding
+
+The `addLabel` and `addLabels` methods add labels to issues.
+These labels need to already exist in GitHub, otherwise an error occurs.
+```ts
+// Add the 'urgent' labels. Fires onChanged if it wasn't already there
+Actions.addLabel('urgent');
+// Add the 'urgent' and 'bug' labels. Fires onChanged if either wasn't already there
+Actions.addLabel('urgent', 'bug');
+// Array version
+Actions.addLabels(['urgent', 'domain: arrays', 'other]);
+```
+
+### Removing
+
+The `removeLabel` and `removeLabels` functions work the same as their `add` counterparts.
+The `onChanged` event fires if the label *was* present.
+
+### Setting
+
+You can specify the exact set of labels an issue should have.
+The `onChanged` event fires if any label is added or removed.
+```ts
+Actions.setLabels('urgent', 'question');
+```
 
