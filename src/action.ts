@@ -3,7 +3,7 @@
 import GithubAPIClient from './client';
 import { addAction } from './actionRunner';
 
-import { Issue } from './github';
+import { Issue, Comment, User, Label, Milestone } from './github';
 
 export type Logger = {};
 export type OnChangeHandler = (item: Issue) => void;
@@ -110,9 +110,80 @@ export namespace Labels {
     }
 }
 
-namespace Assignees {
-    abstract class Base extends BaseAction {
-        constructor(public issue: GitHubAPI.Issue, public assignees: string[]) {
+export namespace Comments {
+    interface CommentHeader {
+        slug: string;
+
+    }
+    function parseHeader(body: string): CommentHeader | undefined {
+        const regex = /^<!--header (.*) headerend-->/g;
+        const match = regex.exec(body);
+        return match ? JSON.parse(match[1]) : undefined;
+    }
+
+    function makeHeader(header: CommentHeader) {
+        // return `<!-- 🤖🔊 ${JSON.stringify(header)} 🔊🤖 -->`;
+        return `<!--header ${JSON.stringify(header)} headerend-->`;
+    }
+
+    function makeFooter() {
+        // return `<!-- 🤖🔈 potent-bot @ ${(new Date()).toLocaleString()} 🔈🤖 -->`;
+        return `<!-- potent-bot @ ${(new Date()).toLocaleString()} -->`;
+    }
+
+    function makeComment(slug: string, body: string) {
+        return makeHeader({slug}) + '\r\n' + body + '\r\n' + makeFooter();
+    }
+
+    function getBody(comment: Comment) {
+        const regex = /🔊🤖 -->\r?\n(.*)\r?\n<!-- 🤖🔈/;
+        const match = regex.exec(comment.body);
+        if (match) {
+            return match[1];
+        }
+        return comment.body;
+    }
+
+    export abstract class Base extends BaseAction {
+        constructor(public issue: Issue, public slug: string) {
+            super();
+        }
+    }
+    export class Add extends Base {
+        constructor(issue: Issue, slug: string, public body: string) {
+            super(issue, slug);
+        }
+        get summary() {
+            return `Write comment (slug '${this.slug}') on issue ${this.issue.number}`;
+        }
+
+        async execute(info: ActionExecuteInfo) {
+            const me = await info.client.getMyLogin();
+            // Find my comments, if it exists
+            const comments = (await this.issue.getComments()).filter(c => c.user.login === me.login);
+            for (const c of comments) {
+                const header = parseHeader(c.body);
+                if (header && (header.slug === this.slug)) {
+                    const body = getBody(c);
+                    if (body !== this.body) {
+                        this.fireOnBeforeChange(this.issue);
+                        await info.client.editComment(c, makeComment(this.slug, this.body));
+                        this.fireOnChanged(this.issue);
+                    }
+                    return;
+                }                
+            }
+            this.fireOnBeforeChange(this.issue);
+            await info.client.addComment(this.issue, makeComment(this.slug, this.body));
+            this.fireOnChanged(this.issue);
+        }
+    }
+   
+}
+
+export namespace Assignees {
+    export abstract class Base extends BaseAction {
+        constructor(public issue: Issue, public assignees: string[]) {
             super();
         }
     }

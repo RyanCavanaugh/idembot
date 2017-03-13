@@ -17,7 +17,7 @@ export type IssuePageFetchResult = {
     fetchMore?: () => Promise<IssuePageFetchResult>;
 }
 
-export default class GithubAPIClient {
+export default class GitHubAPIClient {
     constructor(public oauthToken: string) {
     }
 
@@ -33,7 +33,7 @@ export default class GithubAPIClient {
     }
     private updateFromCache<Data,
         Instance extends { update(d: Data): void },
-        Cls extends { new(c: GithubAPIClient, d: Data): Instance; }>
+        Cls extends { new (c: GitHubAPIClient, d: Data): Instance; }>
         (cache: WeakStringMap<Instance>, key: string, data: Data, ctor: Cls) {
         const result = cache.get(key);
         if (result === undefined) {
@@ -64,17 +64,31 @@ export default class GithubAPIClient {
     public getUserSync(data: GitHubAPI.User) {
         return this.updateFromCache(this.userCache, data.login, data, Wrapped.User);
     }
-    public async getUser(login: string, data?: GitHubAPI.User) {
+    public async getUser(login: string) {
         return await this.fetchFromCache(this.userCache, login, this.fetchUser(login));
     }
     private async fetchUser(login: string) {
         const data = JSON.parse(await this.exec('GET', path('users', login)));
         return new Wrapped.User(this, data);
     }
-    
+
     private labelCache = new WeakStringMap<Wrapped.Label>();
     public getLabelSync(data: GitHubAPI.Label) {
         return this.updateFromCache(this.labelCache, data.url, data, Wrapped.Label);
+    }
+
+    private commentCache = new WeakStringMap<Wrapped.Comment>();
+    public getCommentSync(data: GitHubAPI.IssueComment) {
+        return this.updateFromCache(this.commentCache, data.id.toString(), data, Wrapped.Comment);
+    }
+
+    private me: Wrapped.User | undefined;
+    public async getMyLogin() {
+        if (this.me === undefined) {
+            const self = JSON.parse(await this.exec('GET', '/user')).login;
+            this.me = await this.getUser(self);
+        }
+        return this.me;
     }
 
     public async addLabels(issue: Wrapped.Issue, labels: string[]) {
@@ -107,8 +121,25 @@ export default class GithubAPIClient {
         );
     }
 
-    public addAssignee() {
+    public async getIssueComments(issue: Wrapped.Issue) {
+        const raw = await this.execPaged(path('repos', issue.repository.owner, issue.repository.name, 'issues', issue.number, 'comments'));
+        return raw.map(c => this.getCommentSync(<GitHubAPI.IssueComment>c));
+    }
 
+    public async addComment(issue: Wrapped.Issue, body: string) {
+        await this.exec('POST',
+            path('repos', issue.repository.owner, issue.repository.name, 'issues', issue.number, 'comments'),
+            {},
+            JSON.stringify({ body })
+        );
+    }
+
+    public async editComment(comment: Wrapped.Comment, body: string) {
+        await this.exec('PATCH',
+            path('repos', comment.repository.owner, comment.repository.name, 'issues', 'comments', comment.id),
+            {},
+            JSON.stringify({ body })
+        );
     }
 
     public async fetchChangedIssues(repo: GitHubAPI.RepoReference) {
@@ -126,11 +157,31 @@ export default class GithubAPIClient {
         };
     }
 
+    private async execPaged(path: string, perPage: number = 100, queryString: { [key: string]: string } = {}): Promise<{}[]> {
+        const result: {}[] = [];
+        var pageNumber = 1;
+        while (true) {
+            console.log(`Fetch page ${pageNumber}...`);
+            const qs = { ...queryString, page: pageNumber.toString(), per_page: perPage.toString() };
+            const page = await this.exec('GET', path, qs);
+            const arr = JSON.parse(page);
+            if (!Array.isArray(arr)) {
+                throw new Error("Didn't parse an array from a paged fetch");
+            }
+            result.push(...arr);
+            if (arr.length < perPage) {
+                return result;
+            }
+            pageNumber++;
+        }
+    }
+
+
     private async exec(method: string, path: string, queryString: { [key: string]: string } = {}, body?: string | undefined): Promise<string> {
         const hostname = "api.github.com";
         const headers: any = {
             "User-Agent": "RyanCavanaugh idembot",
-            "Accept": "application/vnd.github.v3+json",
+            "Accept": "application/vnd.github.squirrel-girl-preview+json",
             "Authorization": `token ${this.oauthToken}`
         };
 
@@ -150,9 +201,9 @@ export default class GithubAPIClient {
                 headers,
                 hostname,
             }, res => {
-                console.log('Headers: ' + JSON.stringify(res.headers, undefined, 2));
+                // console.log('Headers: ' + JSON.stringify(res.headers, undefined, 2));
                 if (res.statusCode! >= 400) {
-                    console.log('Error!');
+                    console.log(`Error! Status code ${res.statusCode} returned`);
                     reject(`Status code ${res.statusCode} returned`);
                     return;
                 }
@@ -165,7 +216,7 @@ export default class GithubAPIClient {
                     resolve(data);
                 });
                 res.on('error', err => {
-                    console.log('Error!');
+                    console.log('Connection Error!');
                     console.log(err);
                     reject(err);
                 })

@@ -2,7 +2,7 @@ import Client from './client';
 import WeakStringMap from './weak-string-map';
 import { addAction } from './actionRunner';
 
-import { IAction, Labels } from './action';
+import { IAction, Labels, Comments } from './action';
 
 function parseDate(s: string): Date;
 function parseDate(s: string | null): Date | null;
@@ -11,12 +11,12 @@ function parseDate(s: string | null): Date | null {
     return new Date(s);
 }
 
-function parseRepoReference(issue: { repository_url: string }) {
-    // "https://api.github.com/repos/octocat/Hello-World
+function parseRepoReference(url: string) {
+    // https://api.github.com/repos/octocat/Hello-World/something
     const regex = /^https:\/\/[^\/]+\/repos\/([^\/]+)\/([^\/]+)/;
-    const match = regex.exec(issue.repository_url);
+    const match = regex.exec(url);
     if (match == null) {
-        throw new Error(`Issue repository URL was in an unexpected format: ${issue.repository_url}`);
+        throw new Error(`Repository URL was in an unexpected format: ${url}`);
     }
     return Repository.create(match[1], match[2]);
 }
@@ -43,6 +43,30 @@ export class Label {
 
     update(data: GitHubAPI.Label) {
         Object.assign(this, { name: data.name, color: data.color });
+    }
+}
+
+export class Comment {
+    readonly id: number;
+    readonly user: User;
+    readonly created_at: Date;
+    readonly updated_at: Date;
+    readonly body: string;
+    readonly repository: Repository;
+
+    constructor(private client: Client, private originalData: GitHubAPI.IssueComment) {
+        this.update(originalData);
+    }
+
+    update(data: GitHubAPI.IssueComment) {
+        Object.assign(this, {
+            id: data.id,
+            user: this.client.getUserSync(data.user),
+            created_at: parseDate(data.created_at),
+            updated_at: parseDate(data.updated_at),
+            body: data.body,
+            repository: parseRepoReference(data.issue_url)
+        });
     }
 }
 
@@ -150,7 +174,7 @@ export class Issue {
             locked: originalData.locked
         });
 
-        this.repository = parseRepoReference(originalData);
+        this.repository = parseRepoReference(originalData.repository_url);
 
         // Parse some dates
         this.created_at = parseDate(originalData.created_at);
@@ -168,6 +192,10 @@ export class Issue {
 
     update() {
         // TODO: impl
+    }
+
+    async getComments(): Promise<Comment[]> {
+        return await this.client.getIssueComments(this);
     }
 
     /**
@@ -201,8 +229,18 @@ export class Issue {
         return addAction(new Labels.Set(this, labels));
     }
 
+    /**
+     * Returns true if this issue has the specified label
+     */
     hasLabel(labelName: string | Label) {
         const name = typeof labelName === 'string' ? labelName : labelName.name;
         return this.labels.some(l => l.name === name);
+    }
+
+    /**
+     * Adds or updates a comment with the specified slug to the issue
+     */
+    addComment(slug: string, body: string) {
+        return addAction(new Comments.Add(this, slug, body));
     }
 }
