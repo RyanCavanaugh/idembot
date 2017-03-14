@@ -3,9 +3,10 @@ import * as Bot from 'idembot';
 
 function addBugLabel(issue: Bot.Issue) {
     if (issue.user.login === 'RyanCavanaugh') {
-        issue.removeLabel('bug');
+        issue.removeLabel('enhancment');
+        issue.addLabel('bug');
     }
-    issue.addComment('first', 'Thank you for this comment! It is so nice');
+    issue.addComment('first', 'Let us modify with some labels now');
 }
 
 const setup: SetupOptions = {

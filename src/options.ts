@@ -2,6 +2,8 @@ import * as Wrapped from './github';
 
 export interface CommandLineOptions {
     dry: boolean;
+    backport: boolean;
+    ruleNames: string[];
 }
 
 export interface SetupOptions {

@@ -128,7 +128,7 @@ export namespace Comments {
 
     function makeFooter() {
         // return `<!-- 🤖🔈 potent-bot @ ${(new Date()).toLocaleString()} 🔈🤖 -->`;
-        return `<!-- potent-bot @ ${(new Date()).toLocaleString()} -->`;
+        return `<!--footer potent-bot @ ${(new Date()).toLocaleString()} footerend-->`;
     }
 
     function makeComment(slug: string, body: string) {
@@ -136,7 +136,8 @@ export namespace Comments {
     }
 
     function getBody(comment: Comment) {
-        const regex = /🔊🤖 -->\r?\n(.*)\r?\n<!-- 🤖🔈/;
+        //const regex = /🔊🤖 -->\r?\n(.*)\r?\n<!-- 🤖🔈/;
+        const regex = /headerend-->\r?\n(.*)\r?\n<!--footer/;
         const match = regex.exec(comment.body);
         if (match) {
             return match[1];
@@ -166,6 +167,8 @@ export namespace Comments {
                 if (header && (header.slug === this.slug)) {
                     const body = getBody(c);
                     if (body !== this.body) {
+                        console.log('Actual: ' + body);
+                        console.log('Desired: ' + this.body);
                         this.fireOnBeforeChange(this.issue);
                         await info.client.editComment(c, makeComment(this.slug, this.body));
                         this.fireOnChanged(this.issue);

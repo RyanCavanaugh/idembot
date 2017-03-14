@@ -185,9 +185,10 @@ export default class GitHubAPIClient {
             "Authorization": `token ${this.oauthToken}`
         };
 
-        if (body !== undefined) {
+        const bodyStream = !!body && Buffer.from(body);
+        if (bodyStream) {
             headers["Content-Type"] = "application/json";
-            headers["Content-Length"] = body.length.toString();
+            headers["Content-Length"] = bodyStream.length;
         }
 
         const fullPath = path + '?' + Object.keys(queryString).map(k => k + '=' + encodeURIComponent(queryString[k])).join('&');
@@ -221,8 +222,8 @@ export default class GitHubAPIClient {
                     reject(err);
                 })
             });
-            if (body !== undefined) {
-                req.write(body, 'utf8');
+            if (bodyStream) {
+                req.write(bodyStream);
             }
             req.end();
         });
