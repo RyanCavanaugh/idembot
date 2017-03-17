@@ -1,6 +1,6 @@
 import path = require('path');
 import commander = require('commander');
-import { run } from './index';
+import main from './index';
 import { SetupOptions, CommandLineOptions } from './options';
 
 import { Issue } from './github';
@@ -12,12 +12,13 @@ commander
     .option('-b, --backport', "backport rules to all existing issues (default: only run on changed issues)", false)
     .option('-d, --dry', "don't actually change anything", false)
     .option('-r, --rules [rules]', "specify a comma-delimited list of specific rules to run")
-    .option('--ls', "displays a list of rule names and exit")
+    .option('--ls', "displays a list of rule names and exits")
     .parse(process.argv);
 
 const dry = !!commander['dry'];
 const backport = !!commander['backport']
 const filename = commander['file'] || 'rules.js';
+const cacheRoot = path.join(path.dirname(path.resolve(filename)), 'cache');
 
 const rulesMod: SetupOptions = require(path.resolve(filename));
 
@@ -36,8 +37,21 @@ if (oauth === undefined) {
 
 const ruleNames = commander['rules'] || Object.keys(rulesMod.rules);
 const setup = { ...rulesMod,
-    dry, backport, ruleNames };
+    dry, backport, ruleNames, cacheRoot };
 
-run(setup, oauth).then(() => {
+async function run() {
+    for (const repo of setup.repos) {
+        console.log(`Updating cache for ${repo.owner}/${repo.name}...`);
+        const bot = main(repo.owner, repo.name, setup, oauth);
+        await bot.updateCache();
+    }
+    for (const repo of setup.repos) {
+        console.log(`Running ${ruleNames.length} rules on ${repo.owner}/${repo.name}...`);
+        const bot = main(repo.owner, repo.name, setup, oauth);
+        await bot.runRules();
+    }
+}
+
+run().then(() => {
     console.log('Done!');
 });

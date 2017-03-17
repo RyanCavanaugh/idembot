@@ -1,5 +1,3 @@
-/// <reference path="../types/github.d.ts" />
-
 import GithubAPIClient from './client';
 import { addAction } from './actionRunner';
 
@@ -49,18 +47,24 @@ export abstract class BaseAction implements IActionImplementation {
     public abstract async execute(info: ActionExecuteInfo): Promise<void>;
 }
 
+export abstract class BaseIssueAction extends BaseAction {
+    constructor(public issue: Issue) {
+        super();
+    }
+
+    protected async fireOnBeforeChange() {
+        await super.fireOnBeforeChange(this.issue);
+    }
+
+    protected async fireOnChanged() {
+        await super.fireOnChanged(this.issue);
+    }
+}
+
 export namespace Labels {
-    export abstract class Base extends BaseAction {
-        constructor(public issue: Issue, public labels: string[]) {
-            super();
-        }
-
-        protected async fireOnBeforeChange() {
-            await super.fireOnBeforeChange(this.issue);
-        }
-
-        protected async fireOnChanged() {
-            await super.fireOnChanged(this.issue);
+    export abstract class Base extends BaseIssueAction {
+        constructor(issue: Issue, public labels: string[]) {
+            super(issue);
         }
     }
 
@@ -132,7 +136,7 @@ export namespace Comments {
     }
 
     function makeComment(slug: string, body: string) {
-        return makeHeader({slug}) + '\r\n' + body + '\r\n' + makeFooter();
+        return makeHeader({ slug }) + '\r\n' + body + '\r\n' + makeFooter();
     }
 
     function getBody(comment: Comment) {
@@ -145,9 +149,9 @@ export namespace Comments {
         return comment.body;
     }
 
-    export abstract class Base extends BaseAction {
-        constructor(public issue: Issue, public slug: string) {
-            super();
+    export abstract class Base extends BaseIssueAction {
+        constructor(issue: Issue, public slug: string) {
+            super(issue);
         }
     }
     export class Add extends Base {
@@ -169,33 +173,91 @@ export namespace Comments {
                     if (body !== this.body) {
                         console.log('Actual: ' + body);
                         console.log('Desired: ' + this.body);
-                        this.fireOnBeforeChange(this.issue);
+                        this.fireOnBeforeChange();
                         await info.client.editComment(c, makeComment(this.slug, this.body));
-                        this.fireOnChanged(this.issue);
+                        this.fireOnChanged();
                     }
                     return;
-                }                
+                }
             }
-            this.fireOnBeforeChange(this.issue);
+            this.fireOnBeforeChange();
             await info.client.addComment(this.issue, makeComment(this.slug, this.body));
-            this.fireOnChanged(this.issue);
+            this.fireOnChanged();
         }
     }
-   
+
 }
 
 export namespace Assignees {
-    export abstract class Base extends BaseAction {
-        constructor(public issue: Issue, public assignees: string[]) {
-            super();
+    export abstract class Base extends BaseIssueAction {
+        constructor(issue: Issue, public assignees: string[]) {
+            super(issue);
         }
     }
     export class Add extends Base {
         get summary() {
-            return `Assign issue ${this.issue.number} to ${JSON.stringify(this.assignees)}`;
+            return `Assign issue ${this.issue.fullName} to ${JSON.stringify(this.assignees)}`;
         }
 
         async execute(info: ActionExecuteInfo) {
+            throw new Error('Not implemented');
         }
+    }
+}
+
+export namespace Issues {
+    export class Lock extends BaseIssueAction {
+        get summary() {
+            return `Lock issue ${this.issue.fullName}`;
+        }
+
+        async execute(info: ActionExecuteInfo) {
+            if (this.issue.locked) return;
+            this.fireOnBeforeChange();
+            await info.client.lockIssue(this.issue);
+            this.fireOnChanged();
+        }
+    }
+
+    export class Unlock extends BaseIssueAction {
+        get summary() {
+            return `Unlock issue ${this.issue.fullName}`;
+        }
+
+        async execute(info: ActionExecuteInfo) {
+            if (!this.issue.locked) return;
+            this.fireOnBeforeChange();
+            await info.client.unlockIssue(this.issue);
+            this.fireOnChanged();
+        }
+    }
+
+    export class Close extends BaseIssueAction {
+        get summary() {
+            return `Close issue ${this.issue.fullName}`;
+        }
+
+        async execute(info: ActionExecuteInfo) {
+            if (this.issue.state === 'open') {
+                this.fireOnBeforeChange();
+                await info.client.closeIssue(this.issue);
+                this.fireOnChanged();
+            }
+        }
+    }
+
+    export class Reopen extends BaseIssueAction {
+        get summary() {
+            return `Reopen issue ${this.issue.fullName}`;
+        }
+
+        async execute(info: ActionExecuteInfo) {
+            if (this.issue.state === 'closed') {
+                this.fireOnBeforeChange();
+                await info.client.reopenIssue(this.issue);
+                this.fireOnChanged();
+            }
+        }
+
     }
 }

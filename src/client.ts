@@ -1,6 +1,7 @@
 import https = require('https');
 import http = require('http');
 
+import { Cache, createCache } from './cache';
 import * as Wrapped from './github';
 import WeakStringMap from './weak-string-map';
 
@@ -17,11 +18,15 @@ export type IssuePageFetchResult = {
     fetchMore?: () => Promise<IssuePageFetchResult>;
 }
 
+/**
+ * Naming convention in this class:
+ *   fetchThing: *always* does a network request
+ */
 export default class GitHubAPIClient {
-    constructor(public oauthToken: string) {
+    constructor(private oauthToken: string, private cache: Cache) {
     }
 
-    private async fetchFromCache<T>(cache: WeakStringMap<T>, key: string, create: Promise<T>) {
+    private async fetchFromPool<T>(cache: WeakStringMap<T>, key: string, create: Promise<T>) {
         const result = cache.get(key);
         if (result === undefined) {
             const fetched = await create;
@@ -31,7 +36,8 @@ export default class GitHubAPIClient {
             return result;
         }
     }
-    private updateFromCache<Data,
+
+    private updateFromPool<Data,
         Instance extends { update(d: Data): void },
         Cls extends { new (c: GitHubAPIClient, d: Data): Instance; }>
         (cache: WeakStringMap<Instance>, key: string, data: Data, ctor: Cls) {
@@ -51,21 +57,25 @@ export default class GitHubAPIClient {
         return owner + '/' + repo + '#' + issueNumber;
     }
     public async getIssue(owner: string, repo: string, issueNumber: string) {
-        return this.fetchFromCache(this.issueCache, this.issueKey(owner, repo, issueNumber), this.fetchIssue(owner, repo, issueNumber));
+        return this.fetchFromPool(this.issueCache, this.issueKey(owner, repo, issueNumber), this.fetchIssue(owner, repo, issueNumber));
     }
     private async fetchIssue(owner: string, repo: string, issueNumber: string) {
-        return new Wrapped.Issue(<any>null, <any>null);
+        const timestamp = new Date();
+        const result = await this.exec('GET', path('repos', owner, repo, 'issues', issueNumber));
+        const data: GitHubAPI.Issue = JSON.parse(result);
+        await this.cache.save(data, timestamp, data.number, 'issues');
+        return new Wrapped.Issue(this, data);
     }
     private getIssueSync(owner: string, repo: string, data: GitHubAPI.Issue) {
-        return this.updateFromCache(this.issueCache, this.issueKey(owner, repo, data.number.toString()), data, Wrapped.Issue);
+        return this.updateFromPool(this.issueCache, this.issueKey(owner, repo, data.number.toString()), data, Wrapped.Issue);
     }
 
     private userCache = new WeakStringMap<Wrapped.User>();
     public getUserSync(data: GitHubAPI.User) {
-        return this.updateFromCache(this.userCache, data.login, data, Wrapped.User);
+        return this.updateFromPool(this.userCache, data.login, data, Wrapped.User);
     }
     public async getUser(login: string) {
-        return await this.fetchFromCache(this.userCache, login, this.fetchUser(login));
+        return await this.fetchFromPool(this.userCache, login, this.fetchUser(login));
     }
     private async fetchUser(login: string) {
         const data = JSON.parse(await this.exec('GET', path('users', login)));
@@ -74,12 +84,12 @@ export default class GitHubAPIClient {
 
     private labelCache = new WeakStringMap<Wrapped.Label>();
     public getLabelSync(data: GitHubAPI.Label) {
-        return this.updateFromCache(this.labelCache, data.url, data, Wrapped.Label);
+        return this.updateFromPool(this.labelCache, data.url, data, Wrapped.Label);
     }
 
     private commentCache = new WeakStringMap<Wrapped.Comment>();
     public getCommentSync(data: GitHubAPI.IssueComment) {
-        return this.updateFromCache(this.commentCache, data.id.toString(), data, Wrapped.Comment);
+        return this.updateFromPool(this.commentCache, data.id.toString(), data, Wrapped.Comment);
     }
 
     private me: Wrapped.User | undefined;
@@ -122,8 +132,40 @@ export default class GitHubAPIClient {
     }
 
     public async getIssueComments(issue: Wrapped.Issue) {
+        const timestamp = new Date();
         const raw = await this.execPaged(path('repos', issue.repository.owner, issue.repository.name, 'issues', issue.number, 'comments'));
+        await this.cache.save(raw, timestamp, issue.number, 'issues', 'comments');
         return raw.map(c => this.getCommentSync(<GitHubAPI.IssueComment>c));
+    }
+
+    public async lockIssue(issue: Wrapped.Issue) {
+        await this.exec('PUT',
+            path('repos', issue.repository.owner, issue.repository.name, 'issues', issue.number, 'lock'),
+            {},
+            ""
+        );
+    }
+
+    public async unlockIssue(issue: Wrapped.Issue) {
+        await this.exec('DELETE',
+            path('repos', issue.repository.owner, issue.repository.name, 'issues', issue.number, 'lock')
+        );
+    }
+
+    public async closeIssue(issue: Wrapped.Issue) {
+        await this.exec('PATCH',
+            path('repos', issue.repository.owner, issue.repository.name, 'issues', issue.number),
+            {},
+            JSON.stringify({ state: 'closed' })
+        );
+    }
+
+    public async reopenIssue(issue: Wrapped.Issue) {
+        await this.exec('PATCH',
+            path('repos', issue.repository.owner, issue.repository.name, 'issues', issue.number),
+            {},
+            JSON.stringify({ state: 'open' })
+        );
     }
 
     public async addComment(issue: Wrapped.Issue, body: string) {
@@ -142,17 +184,30 @@ export default class GitHubAPIClient {
         );
     }
 
-    public async fetchChangedIssues(repo: GitHubAPI.RepoReference) {
+    public async fetchChangedIssues(repo: GitHubAPI.RepoReference, opts?: { since?: Date, page?: number }) {
         // https://developer.github.com/v3/issues/#list-issues
-        const page = await this.exec('GET',
+        const timestamp = new Date();
+        const queryString: any = {
+            sort: 'updated',
+            filter: 'all',
+            direction: 'desc',
+            per_page: 100
+        };
+        if (opts) {
+            if (opts.since) queryString.since = opts.since.toISOString();
+            if (opts.page) queryString.page = opts.page;
+        }
+
+        const page: GitHubAPI.Issue[] = JSON.parse(await this.exec('GET',
             path('repos', repo.owner, repo.name, 'issues'),
-            {
-                sort: 'updated',
-                filter: 'all',
-                direction: 'desc'
-            });
+            queryString));
+        
+        for (const issue of page) {
+            await this.cache.save(issue, timestamp, issue.number, 'issues');
+        }
+
         return {
-            issues: JSON.parse(page).map((issue: GitHubAPI.Issue) => this.getIssueSync(repo.owner, repo.name, issue)),
+            issues: page.map((issue: GitHubAPI.Issue) => this.getIssueSync(repo.owner, repo.name, issue)),
             fetchMore: undefined
         };
     }
@@ -185,8 +240,8 @@ export default class GitHubAPIClient {
             "Authorization": `token ${this.oauthToken}`
         };
 
-        const bodyStream = !!body && Buffer.from(body);
-        if (bodyStream) {
+        const bodyStream = body === undefined ? undefined : Buffer.from(body);
+        if (bodyStream !== undefined) {
             headers["Content-Type"] = "application/json";
             headers["Content-Length"] = bodyStream.length;
         }
@@ -222,7 +277,7 @@ export default class GitHubAPIClient {
                     reject(err);
                 })
             });
-            if (bodyStream) {
+            if (bodyStream !== undefined) {
                 req.write(bodyStream);
             }
             req.end();

@@ -4,6 +4,7 @@ export interface CommandLineOptions {
     dry: boolean;
     backport: boolean;
     ruleNames: string[];
+    cacheRoot: string;
 }
 
 export interface SetupOptions {

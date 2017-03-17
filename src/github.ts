@@ -1,14 +1,15 @@
 import Client from './client';
 import WeakStringMap from './weak-string-map';
 import { addAction } from './actionRunner';
+import moment = require('moment');
 
-import { IAction, Labels, Comments } from './action';
+import { IAction, Labels, Comments, Issues } from './action';
 
-function parseDate(s: string): Date;
-function parseDate(s: string | null): Date | null;
-function parseDate(s: string | null): Date | null {
+function parseDate(s: string): moment.Moment;
+function parseDate(s: string | null): moment.Moment | null;
+function parseDate(s: string | null): moment.Moment | null {
     if (s === null) return null;
-    return new Date(s);
+    return moment(new Date(s));
 }
 
 function parseRepoReference(url: string) {
@@ -49,8 +50,8 @@ export class Label {
 export class Comment {
     readonly id: number;
     readonly user: User;
-    readonly created_at: Date;
-    readonly updated_at: Date;
+    readonly created_at: moment.Moment;
+    readonly updated_at: moment.Moment;
     readonly body: string;
     readonly repository: Repository;
 
@@ -87,13 +88,13 @@ export class Milestone {
     readonly creator: User;
 
     /** When this milestone was created */
-    readonly created_at: Date;
+    readonly created_at: moment.Moment;
     /** When this milestone was last updated */
-    readonly updated_at: Date;
+    readonly updated_at: moment.Moment;
     /** When this milestone is due, if applicable */
-    readonly due_on: Date | null;
+    readonly due_on: moment.Moment | null;
     /** When this milestone was closed, if applicable */
-    readonly closed_at: Date | null;
+    readonly closed_at: moment.Moment | null;
 
     constructor(private client: Client, private originalData: GitHubAPI.Milestone) {
         Object.assign(this, {
@@ -131,7 +132,7 @@ export class Repository {
 
 export class Issue {
     /** This is the actual user-facing number */
-    readonly number: string;
+    readonly number: number;
     /** Title */
     readonly title: string;
     /** The main body of the issue */
@@ -142,11 +143,11 @@ export class Issue {
     readonly locked: boolean;
 
     /** When this issue was created */
-    readonly created_at: Date;
+    readonly created_at: moment.Moment;
     /** When this issue was last updated */
-    readonly updated_at: Date;
+    readonly updated_at: moment.Moment;
     /** When this issue was closed, if it's closed */
-    readonly closed_at: Date | null;
+    readonly closed_at: moment.Moment | null;
 
     /** The labels this issue has */
     readonly labels: ReadonlyArray<Label>;
@@ -164,10 +165,15 @@ export class Issue {
 
     readonly repository: Repository;
 
+    /** Returns a string like 'Microsoft/TypeScript#14' */
+    get fullName(): string {
+        return `${this.repository.owner}/${this.repository.name}#${this.number}`
+    }
+
     constructor(private client: Client, private originalData: GitHubAPI.Issue) {
         // Copy some fields
         Object.assign(this, {
-            number: originalData.number.toString(),
+            number: originalData.number,
             title: originalData.title,
             body: originalData.body,
             state: originalData.state,
@@ -242,5 +248,21 @@ export class Issue {
      */
     addComment(slug: string, body: string) {
         return addAction(new Comments.Add(this, slug, body));
+    }
+
+    lock() {
+        return addAction(new Issues.Lock(this));
+    }
+
+    unlock() {
+        return addAction(new Issues.Unlock(this));
+    }
+
+    close() {
+        return addAction(new Issues.Close(this));
+    }
+
+    reopen() {
+        return addAction(new Issues.Reopen(this));
     }
 }
