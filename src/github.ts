@@ -12,7 +12,7 @@ function parseDate(s: string | null): moment.Moment | null {
     return moment(new Date(s));
 }
 
-function parseRepoReference(url: string) {
+export function parseRepoReference(url: string) {
     // https://api.github.com/repos/octocat/Hello-World/something
     const regex = /^https:\/\/[^\/]+\/repos\/([^\/]+)\/([^\/]+)/;
     const match = regex.exec(url);

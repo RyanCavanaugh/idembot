@@ -46,7 +46,7 @@ namespace GitHubAPI {
         updated_at: string;
         closed_at: string | null;
 
-        // Sometimes appears
+        // Sometimes (!) appears
         repository?: Repository;
 
         pull_request?: {

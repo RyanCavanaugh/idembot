@@ -4,10 +4,7 @@ import http = require('http');
 import { Cache, createCache } from './cache';
 import * as Wrapped from './github';
 import WeakStringMap from './weak-string-map';
-
-type Issue = GitHubAPI.Issue;
-type PR = GitHubAPI.Issue;
-type IssueOrPR = Issue | PR;
+import { Pool } from './pool';
 
 function path(...parts: (string | number)[]) {
     return '/' + parts.map(encodeURIComponent).join('/');
@@ -18,6 +15,16 @@ export type IssuePageFetchResult = {
     fetchMore?: () => Promise<IssuePageFetchResult>;
 }
 
+export namespace Keys {
+    export type User = string;
+    export type Issue = [string, string, number];
+}
+
+function keyFromIssue(issue: GitHubAPI.Issue): Keys.Issue {
+    const repo = Wrapped.parseRepoReference(issue.repository_url);
+    return [repo.owner, repo.name, issue.number];
+}
+
 /**
  * Naming convention in this class:
  *   fetchThing: *always* does a network request
@@ -26,61 +33,38 @@ export default class GitHubAPIClient {
     constructor(private oauthToken: string, private cache: Cache) {
     }
 
-    private async fetchFromPool<T>(cache: WeakStringMap<T>, key: string, create: Promise<T>) {
-        const result = cache.get(key);
-        if (result === undefined) {
-            const fetched = await create;
-            cache.set(key, fetched);
-            return fetched;
-        } else {
-            return result;
+    public readonly issuePool = new Pool(this, {
+        constructor: Wrapped.Issue,
+        keyToString: (key: [string, string, number]) => key[0] + '/' + key[1] + '#' + key[2],
+        keyOf: keyFromIssue,
+        fetchData: async key => {
+            const data = JSON.parse(await this.exec('GET', path('repos', key[0], key[1], 'issues', key[2])));
+            const timestamp = new Date();
+            await this.cache.save(data, timestamp, data.number, 'issues');
+            return JSON.parse(data) as GitHubAPI.Issue;
         }
-    }
+    });
 
-    private updateFromPool<Data,
-        Instance extends { update(d: Data): void },
-        Cls extends { new (c: GitHubAPIClient, d: Data): Instance; }>
-        (cache: WeakStringMap<Instance>, key: string, data: Data, ctor: Cls) {
-        const result = cache.get(key);
-        if (result === undefined) {
-            const fetched = new ctor(this, data);
-            cache.set(key, fetched);
-            return fetched;
-        } else {
-            result.update(data);
-            return result;
-        }
-    }
+    public readonly userPool = new Pool(this, {
+        constructor: Wrapped.User,
+        keyToString: (k: string) => k,
+        keyOf: data => data.login,
+        fetchData: async login => {
+            const data = await this.exec('GET', path('users', login));
+            return JSON.parse(data) as GitHubAPI.User;
+        },
+    });
 
-    private issueCache = new WeakStringMap<Wrapped.Issue>();
-    private issueKey(owner: string, repo: string, issueNumber: string) {
-        return owner + '/' + repo + '#' + issueNumber;
-    }
-    public async getIssue(owner: string, repo: string, issueNumber: string) {
-        return this.fetchFromPool(this.issueCache, this.issueKey(owner, repo, issueNumber), this.fetchIssue(owner, repo, issueNumber));
-    }
-    private async fetchIssue(owner: string, repo: string, issueNumber: string) {
-        const timestamp = new Date();
-        const result = await this.exec('GET', path('repos', owner, repo, 'issues', issueNumber));
-        const data: GitHubAPI.Issue = JSON.parse(result);
-        await this.cache.save(data, timestamp, data.number, 'issues');
-        return new Wrapped.Issue(this, data);
-    }
-    private getIssueSync(owner: string, repo: string, data: GitHubAPI.Issue) {
-        return this.updateFromPool(this.issueCache, this.issueKey(owner, repo, data.number.toString()), data, Wrapped.Issue);
-    }
-
-    private userCache = new WeakStringMap<Wrapped.User>();
-    public getUserSync(data: GitHubAPI.User) {
-        return this.updateFromPool(this.userCache, data.login, data, Wrapped.User);
-    }
-    public async getUser(login: string) {
-        return await this.fetchFromPool(this.userCache, login, this.fetchUser(login));
-    }
-    private async fetchUser(login: string) {
-        const data = JSON.parse(await this.exec('GET', path('users', login)));
-        return new Wrapped.User(this, data);
-    }
+    public readonly labelPool = new Pool(this, {
+        constructor: Wrapped.Label,
+        keyToString: (k: string) => k,
+        keyOf: data => data.url,
+        fetchData: async url => {
+            const data = await this.exec('GET', path('labels', login));
+            return JSON.parse(data) as GitHubAPI.User;            
+            return JSON.parse(url);
+        },
+    });
 
     private labelCache = new WeakStringMap<Wrapped.Label>();
     public getLabelSync(data: GitHubAPI.Label) {
