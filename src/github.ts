@@ -1,9 +1,10 @@
-import Client from './client';
+import * as client from './client';
 import WeakStringMap from './weak-string-map';
 import { addAction } from './actionRunner';
 import moment = require('moment');
 
-import { IAction, Labels, Comments, Issues } from './action';
+import * as Actions from './action';
+import * as Pools from './pools';
 
 function parseDate(s: string): moment.Moment;
 function parseDate(s: string | null): moment.Moment | null;
@@ -25,7 +26,7 @@ export function parseRepoReference(url: string) {
 export class User {
     readonly login: string;
 
-    constructor(private client: Client, private originalData: GitHubAPI.User) {
+    constructor(private originalData: GitHubAPI.User) {
         this.update(originalData);
     }
     public update(data: GitHubAPI.User) {
@@ -38,8 +39,8 @@ export class User {
 export class Label {
     readonly name: string;
     readonly color: string;
-    constructor(private client: Client, private originalData: GitHubAPI.Label) {
-        this.update(originalData);
+    constructor(public repo: Repository, data: GitHubAPI.Label) {
+        this.update(data);
     }
 
     update(data: GitHubAPI.Label) {
@@ -47,7 +48,7 @@ export class Label {
     }
 }
 
-export class Comment {
+export class IssueComment {
     readonly id: number;
     readonly user: User;
     readonly created_at: moment.Moment;
@@ -55,14 +56,14 @@ export class Comment {
     readonly body: string;
     readonly repository: Repository;
 
-    constructor(private client: Client, private originalData: GitHubAPI.IssueComment) {
+    constructor(private originalData: GitHubAPI.IssueComment, public issue: Issue) {
         this.update(originalData);
     }
 
     update(data: GitHubAPI.IssueComment) {
         Object.assign(this, {
             id: data.id,
-            user: this.client.getUserSync(data.user),
+            user: Pools.Users.instantiate(data.user),
             created_at: parseDate(data.created_at),
             updated_at: parseDate(data.updated_at),
             body: data.body,
@@ -96,7 +97,7 @@ export class Milestone {
     /** When this milestone was closed, if applicable */
     readonly closed_at: moment.Moment | null;
 
-    constructor(private client: Client, private originalData: GitHubAPI.Milestone) {
+    constructor(private originalData: GitHubAPI.Milestone) {
         Object.assign(this, {
             id: originalData.id,
             number: originalData.number,
@@ -105,13 +106,14 @@ export class Milestone {
             state: originalData.state
         });
 
-        this.creator = client.getUserSync(originalData.creator);
+        this.creator = Pools.Users.instantiate(originalData.creator);
 
         this.created_at = parseDate(originalData.created_at);
         this.updated_at = parseDate(originalData.updated_at);
         this.closed_at = parseDate(originalData.closed_at);
         this.due_on = parseDate(originalData.closed_at);
     }
+
 }
 
 export class Repository {
@@ -170,7 +172,7 @@ export class Issue {
         return `${this.repository.owner}/${this.repository.name}#${this.number}`
     }
 
-    constructor(private client: Client, private originalData: GitHubAPI.Issue) {
+    constructor(private originalData: GitHubAPI.Issue) {
         // Copy some fields
         Object.assign(this, {
             number: originalData.number,
@@ -188,9 +190,9 @@ export class Issue {
         this.closed_at = parseDate(originalData.closed_at);
 
         // Intern some instances
-        this.user = client.getUserSync(originalData.user);
-        this.labels = originalData.labels.map(l => client.getLabelSync(l));
-        this.assignees = originalData.assignees.map(user => client.getUserSync(user));
+        this.user = Pools.Users.instantiate(originalData.user);
+        this.labels = originalData.labels.map(l => Pools.Labels.get(this.repository, l));
+        this.assignees = originalData.assignees.map(user => Pools.Users.instantiate(user));
 
         // Set the PR flag
         this.isPullRequest = !!originalData.pull_request;
@@ -200,39 +202,42 @@ export class Issue {
         // TODO: impl
     }
 
-    async getComments(): Promise<Comment[]> {
-        return await this.client.getIssueComments(this);
+    
+    async getComments(): Promise<IssueComment[]> {
+        const data = await client.fetchIssueComments(this);
+        return data.map(raw => Pools.IssueComments.instantiate(raw, this));
     }
+    
 
     /**
     * Adds a label to an issue or PR.
     */
     addLabel(...labels: string[]) {
-        return addAction(new Labels.Add(this, labels));
+        return addAction(new Actions.Labels.Add(this, labels));
     }
     /**
      * Adds labels to an issue or PR.
      */
     addLabels(labels: string[]) {
-        return addAction(new Labels.Add(this, labels));
+        return addAction(new Actions.Labels.Add(this, labels));
     }
     /**
      * Deletes a label from an issue.
      */
     removeLabel(...labels: string[]) {
-        return addAction(new Labels.Remove(this, labels));
+        return addAction(new Actions.Labels.Remove(this, labels));
     }
     /**
      * Deletes labels from an issue.
      */
     removeLabels(labels: string[]) {
-        return addAction(new Labels.Remove(this, labels));
+        return addAction(new Actions.Labels.Remove(this, labels));
     }
     /**
      * Sets, exactly, which labels are on an issue
      */
     setLabels(...labels: string[]) {
-        return addAction(new Labels.Set(this, labels));
+        return addAction(new Actions.Labels.Set(this, labels));
     }
 
     /**
@@ -247,22 +252,22 @@ export class Issue {
      * Adds or updates a comment with the specified slug to the issue
      */
     addComment(slug: string, body: string) {
-        return addAction(new Comments.Add(this, slug, body));
+        return addAction(new Actions.Comments.Add(this, slug, body));
     }
 
     lock() {
-        return addAction(new Issues.Lock(this));
+        return addAction(new Actions.Issues.Lock(this));
     }
 
     unlock() {
-        return addAction(new Issues.Unlock(this));
+        return addAction(new Actions.Issues.Unlock(this));
     }
 
     close() {
-        return addAction(new Issues.Close(this));
+        return addAction(new Actions.Issues.Close(this));
     }
 
     reopen() {
-        return addAction(new Issues.Reopen(this));
+        return addAction(new Actions.Issues.Reopen(this));
     }
 }

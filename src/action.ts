@@ -1,15 +1,14 @@
-import GithubAPIClient from './client';
+import * as client from './client';
 import { addAction } from './actionRunner';
 
-import { Issue, Comment, User, Label, Milestone } from './github';
+import { Issue, IssueComment, User, Label, Milestone } from './github';
 
 export type Logger = {};
 export type OnChangeHandler = (item: Issue) => void;
 
 export type ActionExecuteInfo = {
-    client: GithubAPIClient,
     log: Logger
-}
+};
 
 export interface IAction {
     summary: string;
@@ -77,7 +76,7 @@ export namespace Labels {
             const labelsToAdd = this.labels.filter(lab => !this.issue.hasLabel(lab));
             if (labelsToAdd.length === 0) return;
             await this.fireOnBeforeChange();
-            await info.client.addLabels(this.issue, labelsToAdd);
+            await client.addLabels(this.issue, labelsToAdd);
             await this.fireOnChanged();
         }
     }
@@ -91,7 +90,7 @@ export namespace Labels {
             const labelsToRemove = this.labels.filter(lab => this.issue.hasLabel(lab));
             if (labelsToRemove.length === 0) return;
             await this.fireOnBeforeChange();
-            await info.client.removeLabels(this.issue, labelsToRemove);
+            await client.removeLabels(this.issue, labelsToRemove);
             await this.fireOnChanged();
         }
     }
@@ -108,7 +107,7 @@ export namespace Labels {
                 return;
             }
             await this.fireOnBeforeChange();
-            await info.client.setLabels(this.issue, this.labels);
+            await client.setLabels(this.issue, this.labels);
             await this.fireOnChanged();
         }
     }
@@ -139,7 +138,7 @@ export namespace Comments {
         return makeHeader({ slug }) + '\r\n' + body + '\r\n' + makeFooter();
     }
 
-    function getBody(comment: Comment) {
+    function getBody(comment: IssueComment) {
         //const regex = /🔊🤖 -->\r?\n(.*)\r?\n<!-- 🤖🔈/;
         const regex = /headerend-->\r?\n(.*)\r?\n<!--footer/;
         const match = regex.exec(comment.body);
@@ -163,7 +162,7 @@ export namespace Comments {
         }
 
         async execute(info: ActionExecuteInfo) {
-            const me = await info.client.getMyLogin();
+            const me = await client.getMyLogin();
             // Find my comments, if it exists
             const comments = (await this.issue.getComments()).filter(c => c.user.login === me.login);
             for (const c of comments) {
@@ -174,14 +173,14 @@ export namespace Comments {
                         console.log('Actual: ' + body);
                         console.log('Desired: ' + this.body);
                         this.fireOnBeforeChange();
-                        await info.client.editComment(c, makeComment(this.slug, this.body));
+                        await client.editComment(c, makeComment(this.slug, this.body));
                         this.fireOnChanged();
                     }
                     return;
                 }
             }
             this.fireOnBeforeChange();
-            await info.client.addComment(this.issue, makeComment(this.slug, this.body));
+            await client.addComment(this.issue, makeComment(this.slug, this.body));
             this.fireOnChanged();
         }
     }
@@ -214,7 +213,7 @@ export namespace Issues {
         async execute(info: ActionExecuteInfo) {
             if (this.issue.locked) return;
             this.fireOnBeforeChange();
-            await info.client.lockIssue(this.issue);
+            await client.lockIssue(this.issue);
             this.fireOnChanged();
         }
     }
@@ -227,7 +226,7 @@ export namespace Issues {
         async execute(info: ActionExecuteInfo) {
             if (!this.issue.locked) return;
             this.fireOnBeforeChange();
-            await info.client.unlockIssue(this.issue);
+            await client.unlockIssue(this.issue);
             this.fireOnChanged();
         }
     }
@@ -240,7 +239,7 @@ export namespace Issues {
         async execute(info: ActionExecuteInfo) {
             if (this.issue.state === 'open') {
                 this.fireOnBeforeChange();
-                await info.client.closeIssue(this.issue);
+                await client.closeIssue(this.issue);
                 this.fireOnChanged();
             }
         }
@@ -254,7 +253,7 @@ export namespace Issues {
         async execute(info: ActionExecuteInfo) {
             if (this.issue.state === 'closed') {
                 this.fireOnBeforeChange();
-                await info.client.reopenIssue(this.issue);
+                await client.reopenIssue(this.issue);
                 this.fireOnChanged();
             }
         }

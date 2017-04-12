@@ -15,23 +15,8 @@ export interface Cache {
     load(id: number, category: string, subName?: string): Promise<CacheLoadResult<any>>;
 }
 
-export function createCache(cacheRoot: string, repoOwner: string, repoName: string): Cache {
-    const rootPath = path.join(cacheRoot, repoOwner, repoName);
-
-    async function mkdirp(pathToMake: string) {
-        let start = pathToMake;
-        const pathsToMake: string[] = [];
-        // Trim until we find something which does exist
-        while (true) {
-            const exists = await fs.exists(start);
-            if (exists) break;
-            pathsToMake.push(start);
-            start = path.dirname(start);
-        }
-        while (pathsToMake.length) {
-            await fs.mkdir(pathsToMake.pop()!);
-        }
-    }
+export function createCache(cacheRoot: string): Cache {
+    const rootPath = path.join(cacheRoot);
 
     function makeFilename(id: number, category: string, subName: string) {
         // e.g. 5132.comments.json, or 2432.json
@@ -81,5 +66,17 @@ export function createCache(cacheRoot: string, repoOwner: string, repoName: stri
     };
 }
 
-
-
+async function mkdirp(pathToMake: string) {
+    let start = pathToMake;
+    const pathsToMake: string[] = [];
+    // Trim until we find something which does exist
+    while (true) {
+        const exists = await fs.exists(start);
+        if (exists) break;
+        pathsToMake.push(start);
+        start = path.dirname(start);
+    }
+    while (pathsToMake.length) {
+        await fs.mkdir(pathsToMake.pop()!);
+    }
+}

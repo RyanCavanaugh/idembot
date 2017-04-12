@@ -50,6 +50,6 @@ const setup: SetupOptions = {
         // addBugLabel,
         // lockOldIssue
     }
-}
+};
 
 export = setup;

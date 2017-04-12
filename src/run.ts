@@ -20,8 +20,10 @@ const backport = !!commander['backport']
 const filename = commander['file'] || 'rules.js';
 const cacheRoot = path.join(path.dirname(path.resolve(filename)), 'cache');
 
+// Load the rules module
 const rulesMod: SetupOptions = require(path.resolve(filename));
 
+// Handle --ls mode and exit
 if (commander['ls']) {
     console.log(`Rules in module ${filename}:`);
     for(const rule of Object.keys(rulesMod.rules)) {
@@ -30,6 +32,7 @@ if (commander['ls']) {
     process.exit(0);
 }
 
+// Check for oauth token
 if (oauth === undefined) {
     console.log('You must set the AUTH_TOKEN environment variable to a suitable OAuth token');
     process.exit(-1);
@@ -45,6 +48,7 @@ async function run() {
         const bot = main(repo.owner, repo.name, setup, oauth);
         await bot.updateCache();
     }
+
     for (const repo of setup.repos) {
         console.log(`Running ${ruleNames.length} rules on ${repo.owner}/${repo.name}...`);
         const bot = main(repo.owner, repo.name, setup, oauth);

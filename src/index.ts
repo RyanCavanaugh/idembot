@@ -1,30 +1,24 @@
 /// <reference path="github-api.ts" />
 
 import * as Actions from './action';
-import APIClient from './client';
+import * as client from './client';
 import { createCache } from './cache';
 import { runActions } from  './actionRunner';
 import { SetupOptions, CommandLineOptions } from './options';
 export { User, Issue, Milestone, Label } from './github';
+export { Users, Issues } from './pools';
 
 export default function bot(repoOwner: string, repoName: string, opts: SetupOptions & CommandLineOptions, oauthToken: string) {
-    const cache = createCache(opts.cacheRoot, repoOwner, repoName);
-    const client = new APIClient(oauthToken, cache);
+    const cache = createCache(opts.cacheRoot);
+    client.initialize(oauthToken, cache);
     
     async function updateCache() {
         // TODO: Figure something out
-
     }
 
     async function runRules() {
-        if (opts === null) {
-            console.log(`Call 'setup' from your rules.js module first`);
-            return;
-        }
-        
         const ruleNames = Object.keys(opts.rules);
         const info: Actions.ActionExecuteInfo = {
-            client,
             log: {}
         };
 
@@ -50,10 +44,10 @@ export default function bot(repoOwner: string, repoName: string, opts: SetupOpti
         }
     }
 
-    return {
+    return ({
         runRules,
         updateCache
-    }
+    });
 }
 
 export { 

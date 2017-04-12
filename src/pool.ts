@@ -1,4 +1,3 @@
-import Client from './client';
 import WeakStringMap from './weak-string-map';
 
 /*
@@ -21,10 +20,20 @@ import WeakStringMap from './weak-string-map';
     }
 */
 
-export interface Settings<KeyType, DataType, InstanceType> {
-    constructor: new(client: Client, data: DataType) => InstanceType;
+/**
+ * KeyType: a reference or value type that uniquely identifies an InstanceType
+ * DataType: the type of the JSON data that comes from GitHub
+ * InstanceType: the instance type of the constructed class
+ * ExtraType: the type of extra data needed to instantiate the class
+ */
+export interface Settings<KeyType, DataType, InstanceType, ExtraType> {
+    /** Class constructor for creating a new InstanceType */
+    constructor: new (data: DataType, extra: ExtraType) => InstanceType;
+    /** Fetch a key from the data type */
     keyOf(data: DataType): KeyType;
+    /** Fetch the data for this based on the key */
     fetchData(key: KeyType): Promise<DataType>;
+    /** Construct a string representation of a key */
     keyToString(key: KeyType): string;
 }
 
@@ -32,9 +41,9 @@ export interface IUpdateable<DataType> {
     update(data: DataType): void;
 }
 
-export class Pool<KeyType, DataType, InstanceType extends IUpdateable<DataType>> {
+export class Pool<KeyType, DataType, InstanceType extends IUpdateable<DataType>, ExtraType> {
     private pool = new WeakStringMap<InstanceType>();
-    constructor(private client: Client, private settings: Settings<KeyType, DataType, InstanceType>) {
+    constructor(private settings: Settings<KeyType, DataType, InstanceType, ExtraType>) {
     }
 
     public async get(key: KeyType): Promise<InstanceType> {
@@ -44,16 +53,16 @@ export class Pool<KeyType, DataType, InstanceType extends IUpdateable<DataType>>
             return extant;
         }
         const data = await this.settings.fetchData(key);
-        return this.getSync(data);
+        return this.instantiate(data);
     }
 
-    public getSync(data: DataType): InstanceType {
+    public instantiate(data: DataType, extra?: ExtraType): InstanceType {
         const key = this.settings.keyToString(this.settings.keyOf(data));
         const extant = this.pool.get(key);
         if (extant !== undefined) {
             return extant;
         }
-        const newObj = new (this.settings.constructor)(this.client, data);
+        const newObj = new (this.settings.constructor)(data, extra!);
         this.pool.set(key, newObj);
         return newObj;
     }
