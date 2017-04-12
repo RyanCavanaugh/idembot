@@ -4,6 +4,7 @@
   "description": "*idembot* is a *bot* to perform *idempotent* actions on GitHub issues and pull requests.",
   "main": "bin/index.js",
   "scripts": {
+    "rev": "npm version patch && npm publish && git push",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "typings": "bin/index.d.ts",
