@@ -1,7 +1,6 @@
 import https = require('https');
 import http = require('http');
 
-import { Cache, createCache } from './cache';
 import * as Wrapped from './github';
 import WeakStringMap from './weak-string-map';
 import * as Pools from './pools';
@@ -11,11 +10,10 @@ export type IssuePageFetchResult = {
     fetchMore?: () => Promise<IssuePageFetchResult>;
 }
 
-let oauthToken: string, cache: Cache;
+let oauthToken: string;
 
-export function initialize(_oauthToken: string, _cache: Cache) {
+export function initialize(_oauthToken: string) {
     oauthToken = _oauthToken;
-    cache = _cache;
 }
 
 let me: Wrapped.User | undefined;
@@ -117,6 +115,7 @@ export async function fetchChangedIssues(repo: GitHubAPI.RepoReference, opts?: {
         direction: 'desc',
         per_page: 100
     };
+
     if (opts) {
         if (opts.since) queryString.since = opts.since.toISOString();
         if (opts.page) queryString.page = opts.page;
@@ -125,10 +124,6 @@ export async function fetchChangedIssues(repo: GitHubAPI.RepoReference, opts?: {
     const page: GitHubAPI.Issue[] = JSON.parse(await exec('GET',
         path('repos', repo.owner, repo.name, 'issues'),
         queryString));
-    
-    for (const issue of page) {
-        await cache.save(issue, timestamp, issue.number, 'issues');
-    }
 
     return {
         issues: page.map((issue: GitHubAPI.Issue) => Pools.Issues.instantiate(issue)),

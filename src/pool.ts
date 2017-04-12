@@ -60,6 +60,7 @@ export class Pool<KeyType, DataType, InstanceType extends IUpdateable<DataType>,
         const key = this.settings.keyToString(this.settings.keyOf(data));
         const extant = this.pool.get(key);
         if (extant !== undefined) {
+            extant.update(data);
             return extant;
         }
         const newObj = new (this.settings.constructor)(data, extra!);
