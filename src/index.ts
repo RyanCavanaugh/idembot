@@ -11,6 +11,9 @@ import { User, Issue, PullRequest, Milestone, Label, IssueOrPullRequest } from '
 
 export { User, Issue, PullRequest, Milestone, Label, IssueOrPullRequest } from './github';
 
+process.on('unhandledRejection', (err: any) => {
+    console.error(err);
+});
 
 const defaultFilter: IssueFilter = { };
 
@@ -36,9 +39,13 @@ export default function bot(repoOwner: string, repoName: string, opts: SetupOpti
             console.log(`Running rules on ${repo.owner}/${repo.name}...`);
             let issueResults = await client.fetchChangedIssuesAndPRsRaw(repo);
             issueResults = issueResults.slice(0, 5);
-            console.log(`Fetched ${issueResults.length} changed issues / prs`);
 
-            const issuesAndPRs = await Promise.all(issueResults.map(raw => IssueOrPullRequest.fromData(raw)));
+            console.log(`Fetched ${issueResults.length} changed issues / prs`);
+            const issuesAndPRs: IssueOrPullRequest[] = [];
+            for(const item of issueResults) {
+                issuesAndPRs.push(await IssueOrPullRequest.fromData(item));
+            }
+            // const issuesAndPRs = await Promise.all(issueResults.map(raw => IssueOrPullRequest.fromData(raw)));
             console.log('Downloaded data');
 
             if (opts.rules.issues) {

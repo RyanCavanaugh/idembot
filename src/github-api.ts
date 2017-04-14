@@ -35,7 +35,7 @@ namespace GitHubAPI {
         title: string;
         body: string;
         user: User;
-        labels: Label[];
+        labels: Label[] | undefined;
         state: "open" | "closed";
         locked: boolean;
         assignee: User | null;

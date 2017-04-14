@@ -182,12 +182,12 @@ export class Repository {
     }
 }
 
-export class IssueOrPullRequest {
+export abstract class IssueOrPullRequest {
     static async fromData(data: GitHubAPI.Issue): Promise<Issue | PullRequest> {
         if (data.pull_request) {
             return await PullRequest.fromIssueOrPRData(data);
         } else {
-            return Issue.fromIssueData(data);
+            return await Issue.fromIssueData(data);
         }
     }
 
@@ -239,7 +239,7 @@ export class IssueOrPullRequest {
     /** A milestone, if one is assigned */
     readonly milestone: Milestone | null;
 
-    readonly isPullRequest: boolean;
+    abstract readonly isPullRequest: boolean;
 
     readonly repository: Repository;
 
@@ -254,7 +254,7 @@ export class IssueOrPullRequest {
             html_url: originalData.html_url
         });
 
-        this.repository = parseRepoReference(originalData.repository_url);
+        this.repository = parseRepoReference(originalData.url);
 
         // Parse some dates
         this.created_at = parseDate(originalData.created_at);
@@ -263,11 +263,8 @@ export class IssueOrPullRequest {
 
         // Intern some instances
         this.user = User.fromData(originalData.user);
-        this.labels = originalData.labels.map(l => Label.fromData(this.repository, l));
+        this.labels = originalData.labels ? originalData.labels.map(l => Label.fromData(this.repository, l)) : [];
         this.assignees = originalData.assignees.map(user => User.fromData(user));
-
-        // Set the PR flag
-        this.isPullRequest = !!originalData.pull_request;
     }
 
     /** Returns a string like 'Microsoft/TypeScript#14' */
@@ -373,6 +370,8 @@ export class Issue extends IssueOrPullRequest {
         return new Issue(data);
     }
 
+    readonly isPullRequest: boolean = false;
+
     private constructor(data: GitHubAPI.Issue) {
         super(data);
     }
@@ -384,10 +383,10 @@ export class PullRequest extends IssueOrPullRequest {
     }
 
     // TODO interning
-    static async fromIssueOrPRData(data: GitHubAPI.Issue) {
+    static async fromIssueOrPRData(data: GitHubAPI.Issue): Promise<PullRequest> {
         if ((data as GitHubAPI.PullRequest).changed_files === undefined) {
             const repo = parseRepoReference(data.url);
-            const prData: GitHubAPI.PullRequest = JSON.parse(await client.exec('GET', path('repos', repo.owner, repo.name, 'pulls', data.number)));
+            const prData: GitHubAPI.PullRequest = await client.fetchPR(repo, data.number);
             return PullRequest.fromPullRequestData(prData);
         } else {
             return PullRequest.fromPullRequestData(data as GitHubAPI.PullRequest);
@@ -409,6 +408,8 @@ export class PullRequest extends IssueOrPullRequest {
     additions: number;
     deletions: number;
     changed_files: number;
+
+    readonly isPullRequest: boolean = true;
 
     private constructor(data: GitHubAPI.PullRequest) {
         super(data);

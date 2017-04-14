@@ -161,7 +161,8 @@ export async function fetchIssueComments(issue: Wrapped.Issue): Promise<GitHubAP
 }
 
 export async function fetchPR(repo: GitHubAPI.RepoReference, number: number): Promise<GitHubAPI.PullRequest> {
-    return JSON.parse(await exec('GET', path('repos', repo.owner, repo.name, 'pulls', number)));
+    const result = JSON.parse(await exec('GET', path('repos', repo.owner, repo.name, 'pulls', number)));
+    return result;
 }
 
 async function execPaged(path: string, perPage: number = 100, queryString: { [key: string]: string } = {}): Promise<{}[]> {
