@@ -1,9 +1,11 @@
 import https = require('https');
 import http = require('http');
 
+import { Issue, IssueOrPullRequest } from './github';
+import { IssueFilter } from './options';
 import * as Wrapped from './github';
 import WeakStringMap from './weak-string-map';
-import * as Pools from './pools';
+import path from './build-path';
 
 export type IssuePageFetchResult = {
     issues: GitHubAPI.Issue[];
@@ -16,11 +18,10 @@ export function initialize(_oauthToken: string) {
     oauthToken = _oauthToken;
 }
 
-let me: Wrapped.User | undefined;
-export async function getMyLogin() {
+let me: string | undefined;
+export async function getMyLogin(): Promise<string> {
     if (me === undefined) {
-        const self: string = JSON.parse(await exec('GET', '/user')).login;
-        me = await Pools.Users.get(self);
+        me = (JSON.parse(await exec('GET', '/user')) as GitHubAPI.User).login;
     }
     return me;
 }
@@ -53,11 +54,6 @@ export async function setLabels(issue: Wrapped.Issue, labels: string[]) {
         {},
         JSON.stringify(labels)
     );
-}
-
-export async function fetchIssueComments(issue: Wrapped.Issue): Promise<GitHubAPI.IssueComment[]> {
-    const raw = await execPaged(path('repos', issue.repository.owner, issue.repository.name, 'issues', issue.number, 'comments'));
-    return raw as GitHubAPI.IssueComment[];
 }
 
 export async function lockIssue(issue: Wrapped.Issue) {
@@ -106,7 +102,40 @@ export async function editComment(comment: Wrapped.IssueComment, body: string) {
     );
 }
 
-export async function fetchChangedIssues(repo: GitHubAPI.RepoReference, opts?: { since?: Date, page?: number }) {
+export type IssuePageResult = {
+    page: GitHubAPI.Issue[];
+    next?(): Promise<IssuePageResult>;
+};
+
+export async function fetchAllIssuesAndPRsRaw(repo: GitHubAPI.RepoReference, filter?: IssueFilter) {
+    return fetchPage(1);
+    async function fetchPage(page: number): Promise<IssuePageResult> {
+        // https://developer.github.com/v3/issues/#list-issues
+        const timestamp = new Date();
+        const queryString: any = {
+            sort: 'created',
+            filter: 'all',
+            direction: 'asc',
+            per_page: 100,
+            page
+        };
+
+        if (filter && filter.openOnly) {
+            queryString.filter = 'open';
+        }
+
+        const thisPage: GitHubAPI.Issue[] = JSON.parse(await exec('GET',
+            path('repos', repo.owner, repo.name, 'issues'),
+            queryString));
+
+        return {
+            page: thisPage,
+            next: thisPage.length === 100 ? (() => fetchPage(page + 1)) : undefined
+        };
+    }
+}
+
+export async function fetchChangedIssuesAndPRsRaw(repo: GitHubAPI.RepoReference, filter?: IssueFilter) {
     // https://developer.github.com/v3/issues/#list-issues
     const timestamp = new Date();
     const queryString: any = {
@@ -116,19 +145,23 @@ export async function fetchChangedIssues(repo: GitHubAPI.RepoReference, opts?: {
         per_page: 100
     };
 
-    if (opts) {
-        if (opts.since) queryString.since = opts.since.toISOString();
-        if (opts.page) queryString.page = opts.page;
+    if (filter && filter.openOnly) {
+        queryString.filter = 'open';
     }
 
     const page: GitHubAPI.Issue[] = JSON.parse(await exec('GET',
         path('repos', repo.owner, repo.name, 'issues'),
         queryString));
+    return page;
+}
 
-    return {
-        issues: page.map((issue: GitHubAPI.Issue) => Pools.Issues.instantiate(issue)),
-        fetchMore: undefined
-    };
+export async function fetchIssueComments(issue: Wrapped.Issue): Promise<GitHubAPI.IssueComment[]> {
+    const raw = await execPaged(path('repos', issue.repository.owner, issue.repository.name, 'issues', issue.number, 'comments'));
+    return raw as GitHubAPI.IssueComment[];
+}
+
+export async function fetchPR(repo: GitHubAPI.RepoReference, number: number): Promise<GitHubAPI.PullRequest> {
+    return JSON.parse(await exec('GET', path('repos', repo.owner, repo.name, 'pulls', number)));
 }
 
 async function execPaged(path: string, perPage: number = 100, queryString: { [key: string]: string } = {}): Promise<{}[]> {
@@ -201,8 +234,4 @@ export async function exec(method: string, path: string, queryString: { [key: st
         }
         req.end();
     });
-}
-
-function path(...parts: (string | number)[]) {
-    return '/' + parts.map(encodeURIComponent).join('/');
 }

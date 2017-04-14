@@ -2,55 +2,100 @@
 
 import * as Actions from './action';
 import * as client from './client';
+import * as logger from 'winston';
+import syncRepoCache from './cache-manager';
 import { createCache } from './cache';
-import { runActions } from  './actionRunner';
-import { SetupOptions, CommandLineOptions } from './options';
-export { User, Issue, Milestone, Label } from './github';
-export { Users, Issues } from './pools';
+import { runActions } from './actionRunner';
+import { SetupOptions, CommandLineOptions, IssueFilter } from './options';
+import { User, Issue, PullRequest, Milestone, Label, IssueOrPullRequest } from './github';
+
+export { User, Issue, PullRequest, Milestone, Label, IssueOrPullRequest } from './github';
+
+
+const defaultFilter: IssueFilter = { };
 
 export default function bot(repoOwner: string, repoName: string, opts: SetupOptions & CommandLineOptions, oauthToken: string) {
     const cache = createCache(opts.cacheRoot);
-    client.initialize(oauthToken, cache);
-    
+    client.initialize(oauthToken);
+
     async function updateCache() {
-        // TODO: Figure something out
+        for (const repo of opts.repos) {
+            await syncRepoCache(cache, repo, repo.filter || defaultFilter);
+        }
     }
 
     async function runRules() {
-        const ruleNames = Object.keys(opts.rules);
         const info: Actions.ActionExecuteInfo = {
             log: {}
         };
 
         for (const repo of opts.repos) {
-            console.log(`Running ${Object.keys(opts.rules).length} rules on ${repo.owner}/${repo.name}`);
+            logger.info(`Syncing PR/issue cache for ${repo.owner}/${repo.name}`);
+            await updateCache();
 
-            console.log('Fetching repo activity');
-            let page = 0;
-            const issueResults = await client.fetchChangedIssues(repo, { page });
-            for (const issue of issueResults.issues) {
-                for (const ruleName of ruleNames) {
-                    const rule = opts.rules[ruleName];
-                    console.log(`Inovking rule ${ruleName} on ${issue.number}`);
-                    const result = rule(issue);
-                    if (result !== undefined) {
-                        await result;
+            console.log(`Running rules on ${repo.owner}/${repo.name}...`);
+            let issueResults = await client.fetchChangedIssuesAndPRsRaw(repo);
+            issueResults = issueResults.slice(0, 5);
+            console.log(`Fetched ${issueResults.length} changed issues / prs`);
+
+            const issuesAndPRs = await Promise.all(issueResults.map(raw => IssueOrPullRequest.fromData(raw)));
+            console.log('Downloaded data');
+
+            if (opts.rules.issues) {
+                for (const issue of issuesAndPRs.filter(i => !i.isPullRequest)) {
+                    console.log(`Inovking issue rules on ${issue.repository.owner}/${issue.repository.name}#${issue.number}: ${issue.title}`);
+                    for (const ruleName of Object.keys(opts.rules.issues)) {
+                        await runRule(issue, opts.rules.issues[ruleName], ruleName);
                     }
-                    console.log('... done');
                 }
+            } else {
+                console.log('No issue rules specified');
+            }
 
-                await runActions(info, opts);
+            if (opts.rules.pullRequests) {
+                for (const pr of issuesAndPRs.filter(i => i.isPullRequest)) {
+                    console.log(`Inovking PR rules on ${pr.repository.owner}/${pr.repository.name}#${pr.number}: ${pr.title}`);
+                    for (const ruleName of Object.keys(opts.rules.pullRequests)) {
+                        await runRule(pr, opts.rules.pullRequests[ruleName], ruleName);
+                    }
+                }
+            } else {
+                console.log('PR rules specified');
+            }
+
+            if (opts.rules.issuesAndPullRequests) {
+                for (const issueOrPR of issuesAndPRs) {
+                    console.log(`Inovking Issue/PR rules on ${issueOrPR.repository.owner}/${issueOrPR.repository.name}#${issueOrPR.number}: ${issueOrPR.title}`);
+                    for (const ruleName of Object.keys(opts.rules.issuesAndPullRequests)) {
+                        await runRule(issueOrPR, opts.rules.issuesAndPullRequests[ruleName], ruleName);
+                    }
+                }
+            } else {
+                console.log('No issue/PR rules specified');
+            }
+
+            await runActions(info, opts);
+        }
+
+        async function runRule(issue: IssueOrPullRequest, rule: (issue: any) => void, name: string) {
+            try {
+                const result = rule(issue);
+                if (result !== undefined) {
+                    await result;
+                }
+            } catch (e) {
+                logger.error(`Rule ${name} encountered exception running on ${issue.html_url}`);
+                logger.error(e);
             }
         }
     }
 
     return ({
-        runRules,
-        updateCache
+        runRules
     });
 }
 
-export { 
+export {
     Actions,
     SetupOptions
 };

@@ -7,10 +7,26 @@ export interface CommandLineOptions {
     cacheRoot: string;
 }
 
+export interface IssueFilter {
+    openOnly?: boolean;
+}
+
+export interface RepoOptions {
+    filter?: IssueFilter;
+}
+
 export interface SetupOptions {
-    repos: GitHubAPI.RepoReference[];
+    repos: (GitHubAPI.RepoReference & RepoOptions)[];
     rules: {
-        [key: string]: (issue: Wrapped.Issue) => void | Promise<any>;
+        issues?: {
+            [key: string]: (issue: Wrapped.Issue) => void | Promise<any>;
+        };
+        pullRequests?: {
+            [key: string]: (issue: Wrapped.PullRequest) => void | Promise<any>;
+        };
+        issuesAndPullRequests?: {
+            [key: string]: (issue: Wrapped.IssueOrPullRequest) => void | Promise<any>;
+        };
     }
 }
 

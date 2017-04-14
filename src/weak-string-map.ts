@@ -2,18 +2,14 @@ export default class WeakStringMap<T> {
     private keys: { [s: string]: {} } = {};
     private map = new WeakMap<{}, T>();
     public get(s: string): T | undefined {
+        // No key by that name
         if (!this.keys[s]) return undefined;
-        return this.map.get(this.keys[s]);
-    }
-    public has(s: string): boolean {
-        if (!this.keys[s]) return false;
-        const result = this.map.has(s);
-        if (result) {
-            return true;
+        const result = this.map.get(this.keys[s]);
+        if (result === undefined) {
+            // Object went missing from the map so delete its corresponding key
+            delete this.keys[s];
         }
-        // Object went missing from the map so delete its corresponding key
-        delete this.keys[s];
-        return false;
+        return result;
     }
     public delete(s: string) {
         if (!this.keys[s]) return;

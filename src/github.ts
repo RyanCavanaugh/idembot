@@ -2,9 +2,16 @@ import * as client from './client';
 import WeakStringMap from './weak-string-map';
 import { addAction } from './actionRunner';
 import moment = require('moment');
+import { Cache } from './cache';
 
 import * as Actions from './action';
-import * as Pools from './pools';
+import path from './build-path';
+
+export function useCache(c: Cache) {
+    cache = c;
+}
+
+let cache: Cache | undefined = undefined;
 
 function parseDate(s: string): moment.Moment;
 function parseDate(s: string | null): moment.Moment | null;
@@ -24,9 +31,31 @@ export function parseRepoReference(url: string) {
 }
 
 export class User {
+    private static pool = createPool<User, GitHubAPI.User, string>({
+        fetchData: async (login) => {
+            return JSON.parse(await client.exec('GET', path('users', login)))
+        },
+        construct: data => new User(data),
+        keyFromData: data => data.login
+    });
+    static async fromLogin(login: string): Promise<User> {
+        return await User.pool.fromKey(login);
+    }
+    static fromData(data: GitHubAPI.User): User {
+        return User.pool.fromData(data);
+    }
+
     readonly login: string;
 
-    constructor(private originalData: GitHubAPI.User) {
+    static getCacheKey(login: string) {
+        return `users/${login}`;
+    }
+
+    getCacheKey() {
+        return User.getCacheKey(this.login);
+    }
+
+    private constructor(private originalData: GitHubAPI.User) {
         this.update(originalData);
     }
     public update(data: GitHubAPI.User) {
@@ -37,14 +66,26 @@ export class User {
 }
 
 export class Label {
-    readonly name: string;
-    readonly color: string;
-    constructor(public repo: Repository, data: GitHubAPI.Label) {
-        this.update(data);
+    private static pool = createPool<Label, [GitHubAPI.RepoReference, GitHubAPI.Label], [GitHubAPI.RepoReference, string]>({
+        fetchData: async (key) => {
+            return JSON.parse(await client.exec('GET', path('repos', key[0].owner, key[0].name, 'labels', key[1])));
+        },
+        construct: data => new Label(data[0], data[1]),
+        keyFromData: data => [data[0], data[1].name]
+    });
+
+    static fromData(repo: GitHubAPI.RepoReference, data: GitHubAPI.Label) {
+        return Label.pool.fromData([repo, data]);
     }
 
-    update(data: GitHubAPI.Label) {
-        Object.assign(this, { name: data.name, color: data.color });
+    readonly name: string;
+    readonly color: string;
+    private constructor(public repo: GitHubAPI.RepoReference, data: GitHubAPI.Label) {
+        this.update([repo, data]);
+    }
+
+    update(data: [GitHubAPI.RepoReference, GitHubAPI.Label]) {
+        Object.assign(this, { name: data[1].name, color: data[1].color });
     }
 }
 
@@ -56,14 +97,18 @@ export class IssueComment {
     readonly body: string;
     readonly repository: Repository;
 
-    constructor(private originalData: GitHubAPI.IssueComment, public issue: Issue) {
+    static fromData(originalData: GitHubAPI.IssueComment, issue: Issue) {
+        return new IssueComment(originalData, issue);
+    }
+
+    private constructor(private originalData: GitHubAPI.IssueComment, public issue: Issue) {
         this.update(originalData);
     }
 
     update(data: GitHubAPI.IssueComment) {
         Object.assign(this, {
             id: data.id,
-            user: Pools.Users.instantiate(data.user),
+            user: User.fromData(data.user),
             created_at: parseDate(data.created_at),
             updated_at: parseDate(data.updated_at),
             body: data.body,
@@ -106,7 +151,7 @@ export class Milestone {
             state: originalData.state
         });
 
-        this.creator = Pools.Users.instantiate(originalData.creator);
+        this.creator = User.fromData(originalData.creator);
 
         this.created_at = parseDate(originalData.created_at);
         this.updated_at = parseDate(originalData.updated_at);
@@ -128,11 +173,40 @@ export class Repository {
         }
         return result;
     }
-    constructor(public readonly owner: string, public readonly name: string) {
+
+    public get reference(): GitHubAPI.RepoReference {
+        return { name: this.name, owner: this.name };
+    }
+
+    private constructor(public readonly owner: string, public readonly name: string) {
     }
 }
 
-export class Issue {
+export class IssueOrPullRequest {
+    static async fromData(data: GitHubAPI.Issue): Promise<Issue | PullRequest> {
+        if (data.pull_request) {
+            return await PullRequest.fromIssueOrPRData(data);
+        } else {
+            return Issue.fromIssueData(data);
+        }
+    }
+
+    static getCacheKey(repo: GitHubAPI.RepoReference, number: number, isPR: boolean) {
+        return IssueOrPullRequest.getCacheKeyBasePath(repo, number, isPR) + '.json';
+    }
+
+    static getCommentsCacheKey(repo: GitHubAPI.RepoReference, number: number, isPR: boolean) {
+        return IssueOrPullRequest.getCacheKeyBasePath(repo, number, isPR) + '.comments.json';
+    }
+
+    static getCacheKeyBasePath(repo: GitHubAPI.RepoReference, number: number, isPR: boolean) {
+        const kind = isPR ? "pull_requests" : "issues";
+        // 0000, 1000, 2000, etc
+        const thousands = `${Math.floor(number / 1000)}000`;
+        // e.g. Microsoft/TypeScript/issues/3000/3123
+        return `${repo.owner}/${repo.name}/${kind}/${thousands}/${number}`;
+    }
+
     /** This is the actual user-facing number */
     readonly number: number;
     /** Title */
@@ -143,6 +217,8 @@ export class Issue {
     readonly state: "open" | "closed";
     /** Whether the issue has been locked or not */
     readonly locked: boolean;
+
+    readonly html_url: string;
 
     /** When this issue was created */
     readonly created_at: moment.Moment;
@@ -167,19 +243,15 @@ export class Issue {
 
     readonly repository: Repository;
 
-    /** Returns a string like 'Microsoft/TypeScript#14' */
-    get fullName(): string {
-        return `${this.repository.owner}/${this.repository.name}#${this.number}`
-    }
-
-    constructor(private originalData: GitHubAPI.Issue) {
+    protected constructor(private originalData: GitHubAPI.Issue) {
         // Copy some fields
         Object.assign(this, {
             number: originalData.number,
             title: originalData.title,
             body: originalData.body,
             state: originalData.state,
-            locked: originalData.locked
+            locked: originalData.locked,
+            html_url: originalData.html_url
         });
 
         this.repository = parseRepoReference(originalData.repository_url);
@@ -190,24 +262,27 @@ export class Issue {
         this.closed_at = parseDate(originalData.closed_at);
 
         // Intern some instances
-        this.user = Pools.Users.instantiate(originalData.user);
-        this.labels = originalData.labels.map(l => Pools.Labels.get(this.repository, l));
-        this.assignees = originalData.assignees.map(user => Pools.Users.instantiate(user));
+        this.user = User.fromData(originalData.user);
+        this.labels = originalData.labels.map(l => Label.fromData(this.repository, l));
+        this.assignees = originalData.assignees.map(user => User.fromData(user));
 
         // Set the PR flag
         this.isPullRequest = !!originalData.pull_request;
+    }
+
+    /** Returns a string like 'Microsoft/TypeScript#14' */
+    get fullName(): string {
+        return `${this.repository.owner}/${this.repository.name}#${this.number}`
     }
 
     update() {
         // TODO: impl
     }
 
-    
     async getComments(): Promise<IssueComment[]> {
         const data = await client.fetchIssueComments(this);
-        return data.map(raw => Pools.IssueComments.instantiate(raw, this));
+        return data.map(raw => IssueComment.fromData(raw, this));
     }
-    
 
     /**
     * Adds a label to an issue or PR.
@@ -241,6 +316,23 @@ export class Issue {
     }
 
     /**
+     * Shortcut method for setting/clearing labels with an object literal, e.g.
+     * issue.setHasLabels({
+     *  "Needs Info": false,
+     *  "Ready for Triage": true
+     * })
+     */
+    setHasLabels(labelMap: { [key: string]: boolean }) {
+        for (const key of Object.keys(labelMap)) {
+            if (labelMap[key]) {
+                this.addLabel(key);
+            } else {
+                this.removeLabel(key);
+            }
+        }
+    }
+
+    /**
      * Returns true if this issue has the specified label
      */
     hasLabel(labelName: string | Label) {
@@ -270,4 +362,122 @@ export class Issue {
     reopen() {
         return addAction(new Actions.Issues.Reopen(this));
     }
+}
+
+export class Issue extends IssueOrPullRequest {
+    static fromData(data: GitHubAPI.Issue): never {
+        throw new Error("Don't call me");
+    }
+
+    static fromIssueData(data: GitHubAPI.Issue) {
+        return new Issue(data);
+    }
+
+    private constructor(data: GitHubAPI.Issue) {
+        super(data);
+    }
+}
+
+export class PullRequest extends IssueOrPullRequest {
+    static fromData(data: GitHubAPI.Issue): never {
+        throw new Error("Don't call me");
+    }
+
+    // TODO interning
+    static async fromIssueOrPRData(data: GitHubAPI.Issue) {
+        if ((data as GitHubAPI.PullRequest).changed_files === undefined) {
+            const repo = parseRepoReference(data.url);
+            const prData: GitHubAPI.PullRequest = JSON.parse(await client.exec('GET', path('repos', repo.owner, repo.name, 'pulls', data.number)));
+            return PullRequest.fromPullRequestData(prData);
+        } else {
+            return PullRequest.fromPullRequestData(data as GitHubAPI.PullRequest);
+        }
+    }
+
+    // TODO interning
+    static fromPullRequestData(data: GitHubAPI.PullRequest) {
+        return new PullRequest(data);
+    }
+
+    merge_commit_sha: string;
+    merged: boolean;
+    mergeable: boolean | null;
+    mergeable_state: GitHubAPI.MergeableState;
+    
+    comments: number;
+    commits: number;
+    additions: number;
+    deletions: number;
+    changed_files: number;
+
+    private constructor(data: GitHubAPI.PullRequest) {
+        super(data);
+
+        Object.assign(this, {
+            merge_commit_sha: data.merge_commit_sha,
+            merged: data.merged,
+            mergeable: data.mergeable,
+            mergeable_state: data.mergeable_state,
+            comments: data.comments,
+            commits: data.commits,
+            additions: data.additions,
+            deletions: data.deletions,
+            changed_files: data.changed_files
+        });
+    }
+}
+
+
+interface PoolSettings<KeyType, DataType, InstanceType> {
+    /** Class constructor for creating a new InstanceType */
+    construct: (data: DataType) => InstanceType;
+    /** Fetch a key from the data type */
+    keyFromData(data: DataType): KeyType;
+    /** Fetch the data for this based on the key */
+    fetchData(key: KeyType): Promise<DataType>;
+    /** Construct a string representation of a key */
+    keyToString?(key: KeyType): string;
+    /** Construct a string representation of a key */
+    keyToCacheKey?(key: KeyType): string;
+}
+
+interface Pool<InstanceType, DataType, KeyType> {
+    fromKey(key: KeyType): Promise<InstanceType>;
+}
+
+function createPool<InstanceType extends { update(d: DataType): void }, DataType, KeyType>(settings: PoolSettings<KeyType, DataType, InstanceType>) {
+    const pool = new WeakStringMap<InstanceType>();
+    settings.keyToString = settings.keyToString || ((k: any) => k);
+    settings.keyToCacheKey = settings.keyToCacheKey || ((k: any) => k);
+
+    return ({
+        fromKey: async function (key: KeyType) {
+            const keyString = settings.keyToString!(key);
+            const extant = pool.get(keyString);
+            if (extant) return extant;
+
+            const cacheKey = settings.keyToCacheKey!(key);
+            const cached = cache && await cache.load(cacheKey);
+            if (cached && cached.exists) {
+                return settings.construct(cached.content);
+            }
+
+            const now = new Date();
+            const data = await settings.fetchData(key);
+            cache && cache.save(data, cacheKey, now);
+            return settings.construct(data);
+        },
+        fromData: function(data: DataType) {
+            const keyString = settings.keyToString!(settings.keyFromData(data));
+            const extant = pool.get(keyString);
+            if (extant) {
+                extant.update(data);
+                return extant;
+            }
+            const result = settings.construct(data);
+            pool.set(keyString, result);
+            return result;
+            
+        }
+    });
 }

@@ -43,10 +43,18 @@ function lockOldIssue(issue: Bot.Issue) {
 
 const setup: SetupOptions = {
     repos: [
-        { owner: 'Microsoft', name: 'types-publisher' }
+        {
+            owner: 'Microsoft',
+            name: 'types-publisher',
+            filter: {
+                openOnly: true
+            }
+        }
     ],
     rules: {
-        examine
+        issues: {
+            examine
+        }
         // addBugLabel,
         // lockOldIssue
     }

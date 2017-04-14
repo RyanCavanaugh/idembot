@@ -4,6 +4,7 @@
   "description": "*idembot* is a *bot* to perform *idempotent* actions on GitHub issues and pull requests.",
   "main": "bin/index.js",
   "scripts": {
+    "build": "node node_modules/typescript/lib/tsc -p .",
     "rev": "npm version patch && npm publish && git push",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -23,16 +24,19 @@
   },
   "homepage": "https://github.com/RyanCavanaugh/idembot#readme",
   "dependencies": {
+    "@types/async": "^2.0.40",
     "@types/commander": "^2.3.31",
     "@types/mkdirp": "^0.3.29",
     "@types/moment": "^2.13.0",
     "@types/mz": "0.0.30",
     "@types/node": "^7.0.8",
     "@types/request": "0.0.41",
+    "@types/winston": "^2.3.0",
     "commander": "^2.9.0",
     "mkdirp": "^0.5.1",
     "moment": "^2.17.1",
     "mz": "^2.6.0",
-    "request": "^2.81.0"
+    "request": "^2.81.0",
+    "winston": "^2.3.1"
   }
 }

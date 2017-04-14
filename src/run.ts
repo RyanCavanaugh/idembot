@@ -44,13 +44,6 @@ const setup = { ...rulesMod,
 
 async function run() {
     for (const repo of setup.repos) {
-        console.log(`Updating cache for ${repo.owner}/${repo.name}...`);
-        const bot = main(repo.owner, repo.name, setup, oauth);
-        await bot.updateCache();
-    }
-
-    for (const repo of setup.repos) {
-        console.log(`Running ${ruleNames.length} rules on ${repo.owner}/${repo.name}...`);
         const bot = main(repo.owner, repo.name, setup, oauth);
         await bot.runRules();
     }

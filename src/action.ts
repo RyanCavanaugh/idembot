@@ -1,10 +1,10 @@
 import * as client from './client';
 import { addAction } from './actionRunner';
 
-import { Issue, IssueComment, User, Label, Milestone } from './github';
+import { Issue, IssueComment, IssueOrPullRequest, PullRequest, User, Label, Milestone } from './github';
 
 export type Logger = {};
-export type OnChangeHandler = (item: Issue) => void;
+export type OnChangeHandler = (item: IssueOrPullRequest) => void;
 
 export type ActionExecuteInfo = {
     log: Logger
@@ -31,13 +31,13 @@ export abstract class BaseAction implements IActionImplementation {
         this.beforeChangeHandlers.push(handler);
     }
 
-    protected async fireOnBeforeChange(issue: Issue) {
+    protected async fireOnBeforeChange(issue: IssueOrPullRequest) {
         for (const before of this.beforeChangeHandlers) {
             await before(issue);
         }
     }
 
-    protected async fireOnChanged(issue: Issue) {
+    protected async fireOnChanged(issue: IssueOrPullRequest) {
         for (const after of this.afterChangeHandlers) {
             await after(issue);
         }
@@ -47,7 +47,7 @@ export abstract class BaseAction implements IActionImplementation {
 }
 
 export abstract class BaseIssueAction extends BaseAction {
-    constructor(public issue: Issue) {
+    constructor(public issue: IssueOrPullRequest) {
         super();
     }
 
@@ -62,7 +62,7 @@ export abstract class BaseIssueAction extends BaseAction {
 
 export namespace Labels {
     export abstract class Base extends BaseIssueAction {
-        constructor(issue: Issue, public labels: string[]) {
+        constructor(issue: IssueOrPullRequest, public labels: string[]) {
             super(issue);
         }
     }
@@ -149,12 +149,12 @@ export namespace Comments {
     }
 
     export abstract class Base extends BaseIssueAction {
-        constructor(issue: Issue, public slug: string) {
+        constructor(issue: IssueOrPullRequest, public slug: string) {
             super(issue);
         }
     }
     export class Add extends Base {
-        constructor(issue: Issue, slug: string, public body: string) {
+        constructor(issue: IssueOrPullRequest, slug: string, public body: string) {
             super(issue, slug);
         }
         get summary() {
@@ -164,7 +164,7 @@ export namespace Comments {
         async execute(info: ActionExecuteInfo) {
             const me = await client.getMyLogin();
             // Find my comments, if it exists
-            const comments = (await this.issue.getComments()).filter(c => c.user.login === me.login);
+            const comments = (await this.issue.getComments()).filter(c => c.user.login === me);
             for (const c of comments) {
                 const header = parseHeader(c.body);
                 if (header && (header.slug === this.slug)) {
@@ -172,16 +172,16 @@ export namespace Comments {
                     if (body !== this.body) {
                         console.log('Actual: ' + body);
                         console.log('Desired: ' + this.body);
-                        this.fireOnBeforeChange();
+                        await this.fireOnBeforeChange();
                         await client.editComment(c, makeComment(this.slug, this.body));
-                        this.fireOnChanged();
+                        await this.fireOnChanged();
                     }
                     return;
                 }
             }
-            this.fireOnBeforeChange();
+            await this.fireOnBeforeChange();
             await client.addComment(this.issue, makeComment(this.slug, this.body));
-            this.fireOnChanged();
+            await this.fireOnChanged();
         }
     }
 
@@ -189,7 +189,7 @@ export namespace Comments {
 
 export namespace Assignees {
     export abstract class Base extends BaseIssueAction {
-        constructor(issue: Issue, public assignees: string[]) {
+        constructor(issue: IssueOrPullRequest, public assignees: string[]) {
             super(issue);
         }
     }
@@ -212,9 +212,9 @@ export namespace Issues {
 
         async execute(info: ActionExecuteInfo) {
             if (this.issue.locked) return;
-            this.fireOnBeforeChange();
+            await this.fireOnBeforeChange();
             await client.lockIssue(this.issue);
-            this.fireOnChanged();
+            await this.fireOnChanged();
         }
     }
 
@@ -225,9 +225,9 @@ export namespace Issues {
 
         async execute(info: ActionExecuteInfo) {
             if (!this.issue.locked) return;
-            this.fireOnBeforeChange();
+            await this.fireOnBeforeChange();
             await client.unlockIssue(this.issue);
-            this.fireOnChanged();
+            await this.fireOnChanged();
         }
     }
 
@@ -238,9 +238,9 @@ export namespace Issues {
 
         async execute(info: ActionExecuteInfo) {
             if (this.issue.state === 'open') {
-                this.fireOnBeforeChange();
+                await this.fireOnBeforeChange();
                 await client.closeIssue(this.issue);
-                this.fireOnChanged();
+                await this.fireOnChanged();
             }
         }
     }
@@ -252,9 +252,9 @@ export namespace Issues {
 
         async execute(info: ActionExecuteInfo) {
             if (this.issue.state === 'closed') {
-                this.fireOnBeforeChange();
+                await this.fireOnBeforeChange();
                 await client.reopenIssue(this.issue);
-                this.fireOnChanged();
+                await this.fireOnChanged();
             }
         }
 

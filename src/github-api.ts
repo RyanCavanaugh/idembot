@@ -57,6 +57,53 @@ namespace GitHubAPI {
         }
     }
 
+    /**
+     * dirty: Merge conflict. Merging will be blocked
+     * unknown: Mergeability was not checked yet. Merging will be blocked
+     * blocked: Blocked by a failing/missing required status check.
+     * behind: Head branch is behind the base branch. Only if required status checks is enabled but loose policy is not. Merging will be blocked.
+     * unstable: Failing/pending commit status that is not part of the required status checks. Merging is allowed (yellow box).
+     * has_hooks: This is for Enterprise only, if a repo has custom pre-receive hooks. Merging is allowed (green box).
+     * clean: No conflicts, everything good. Merging is allowed (green box).
+     */
+    export type MergeableState = "dirty" | "unknown" | "blocked" | "behind" | "unstable" | "has_hooks" | "clean";
+    export interface PullRequest extends Issue {
+        merge_commit_sha: string;
+        merged: boolean;
+        /** Mergeable is null if it's not computed yet */
+        mergeable: boolean | null;
+        /** Allegedly undocumented but has been around for 5 years */
+        mergeable_state: MergeableState;
+        merged_by?: User;
+        comments: number;
+        commits: number;
+        additions: number;
+        deletions: number;
+        changed_files: number;
+        maintainer_can_modify: boolean;
+        statuses_url: string;
+        // TODO: Spec out
+        head: void;
+        base: void;
+    }
+
+    // e.g. from https://api.github.com/repos/DefinitelyTyped/DefinitelyTyped/statuses/210d1978139c51386a145af2c36440b3967535e9
+    export interface CommitStatusesElement {
+        url: string;
+        id: number;
+        state: "success" | "pending" | "failure";
+        description: string;
+        target_url: string;
+        context: string;
+        created_at: string;
+        updated_at: string;
+        creator: User;
+    }
+
+    export interface CommitStatus {
+
+    }
+
     export interface User {
         login: string;
         id: number;
