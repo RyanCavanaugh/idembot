@@ -8,7 +8,6 @@ import { createCache } from './cache';
 import { runActions } from './actionRunner';
 import { SetupOptions, CommandLineOptions, IssueFilter } from './options';
 import { User, Issue, PullRequest, Milestone, Label, IssueOrPullRequest } from './github';
-
 export { User, Issue, PullRequest, Milestone, Label, IssueOrPullRequest } from './github';
 
 process.on('unhandledRejection', (err: any) => {
@@ -23,7 +22,7 @@ export default function bot(repoOwner: string, repoName: string, opts: SetupOpti
 
     async function updateCache() {
         for (const repo of opts.repos) {
-            await syncRepoCache(cache, repo, repo.filter || defaultFilter);
+            await syncRepoCache(cache, repo);
         }
     }
 
@@ -36,18 +35,12 @@ export default function bot(repoOwner: string, repoName: string, opts: SetupOpti
             logger.info(`Syncing PR/issue cache for ${repo.owner}/${repo.name}`);
             await updateCache();
 
+            const issueResults = (((opts.rules.issues || opts.rules.issuesAndPullRequests) && await client.fetchChangedIssuesRaw(repo)) || []).map(i => Issue.fromData(i));
+            const prResults = (((opts.rules.pullRequests || opts.rules.issuesAndPullRequests) && await client.fetchChangedPRsRaw(repo)) || []).map(pr => PullRequest.fromReference(repo, pr.number));
+
+            const issuesAndPRs: Array<Issue | PullRequest> = [...issueResults, ...prResults];
+
             console.log(`Running rules on ${repo.owner}/${repo.name}...`);
-            let issueResults = await client.fetchChangedIssuesAndPRsRaw(repo);
-            issueResults = issueResults.slice(0, 5);
-
-            console.log(`Fetched ${issueResults.length} changed issues / prs`);
-            const issuesAndPRs: IssueOrPullRequest[] = [];
-            for(const item of issueResults) {
-                issuesAndPRs.push(await IssueOrPullRequest.fromData(item));
-            }
-            // const issuesAndPRs = await Promise.all(issueResults.map(raw => IssueOrPullRequest.fromData(raw)));
-            console.log('Downloaded data');
-
             if (opts.rules.issues) {
                 for (const issue of issuesAndPRs.filter(i => !i.isPullRequest)) {
                     console.log(`Inovking issue rules on ${issue.repository.owner}/${issue.repository.name}#${issue.number}: ${issue.title}`);

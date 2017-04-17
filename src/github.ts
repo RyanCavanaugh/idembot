@@ -378,6 +378,10 @@ export class Issue extends IssueOrPullRequest {
 }
 
 export class PullRequest extends IssueOrPullRequest {
+    static async fromReference(repo: GitHubAPI.RepoReference, number: number): Promise<PullRequest> {
+        return new PullRequest(await client.fetchPR(repo, number));
+    }
+
     static fromData(data: GitHubAPI.Issue): never {
         throw new Error("Don't call me");
     }

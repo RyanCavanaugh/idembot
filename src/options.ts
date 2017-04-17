@@ -11,8 +11,13 @@ export interface IssueFilter {
     openOnly?: boolean;
 }
 
+export interface PullRequestFilter {
+    openOnly?: boolean;
+}
+
 export interface RepoOptions {
-    filter?: IssueFilter;
+    issueFilter?: IssueFilter;
+    prFilter?: PullRequestFilter;
 }
 
 export interface SetupOptions {

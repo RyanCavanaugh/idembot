@@ -1,10 +1,10 @@
 import * as client from './client';
 import { Cache } from './cache';
 import { Repository, IssueOrPullRequest } from './github';
-import { IssueFilter } from './options';
+import { IssueFilter, RepoOptions } from './options';
 import * as logger from 'winston';
 
-export default async function syncRepoCache(cache: Cache, repo: GitHubAPI.RepoReference, filter: IssueFilter): Promise<void> {
+export default async function syncRepoCache(cache: Cache, repo: GitHubAPI.RepoReference & RepoOptions): Promise<void> {
     // Cache updating algorithm:
     //  1. Get the first 100 recently changed issues
     //  2. Run through this list, newest first, checking timestamps against the local cache
@@ -24,7 +24,7 @@ export default async function syncRepoCache(cache: Cache, repo: GitHubAPI.RepoRe
      */
     async function updateCache(): Promise<boolean> {
         const now = new Date();
-        let page1 = await client.fetchChangedIssuesAndPRsRaw(repo, filter);
+        let page1 = await client.fetchChangedIssuesRaw(repo, repo);
         let lastWasUpToDate = false;
         for (const issue of page1) {
             const key = IssueOrPullRequest.getCacheKey(repo, issue.number, !!issue.pull_request);
@@ -55,7 +55,7 @@ export default async function syncRepoCache(cache: Cache, repo: GitHubAPI.RepoRe
 
     async function fullFetch() {
         let now = new Date();
-        let result = await client.fetchAllIssuesAndPRsRaw(repo, filter);
+        let result = await client.fetchAllIssuesAndPRsRaw(repo);
         while (true) {
             for (const issue of result.page) {
                 await saveIssueOrPR(issue, now);

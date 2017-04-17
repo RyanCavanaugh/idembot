@@ -2,7 +2,7 @@ import https = require('https');
 import http = require('http');
 
 import { Issue, IssueOrPullRequest } from './github';
-import { IssueFilter } from './options';
+import { IssueFilter, PullRequestFilter } from './options';
 import * as Wrapped from './github';
 import WeakStringMap from './weak-string-map';
 import path from './build-path';
@@ -135,9 +135,8 @@ export async function fetchAllIssuesAndPRsRaw(repo: GitHubAPI.RepoReference, fil
     }
 }
 
-export async function fetchChangedIssuesAndPRsRaw(repo: GitHubAPI.RepoReference, filter?: IssueFilter) {
+export async function fetchChangedIssuesRaw(repo: GitHubAPI.RepoReference, filter?: IssueFilter) {
     // https://developer.github.com/v3/issues/#list-issues
-    const timestamp = new Date();
     const queryString: any = {
         sort: 'updated',
         filter: 'all',
@@ -149,8 +148,28 @@ export async function fetchChangedIssuesAndPRsRaw(repo: GitHubAPI.RepoReference,
         queryString.filter = 'open';
     }
 
-    const page: GitHubAPI.Issue[] = JSON.parse(await exec('GET',
+    let page: GitHubAPI.Issue[] = JSON.parse(await exec('GET',
         path('repos', repo.owner, repo.name, 'issues'),
+        queryString));
+    page = page.filter(i => !i.pull_request);
+    return page;
+}
+
+export async function fetchChangedPRsRaw(repo: GitHubAPI.RepoReference, filter?: PullRequestFilter) {
+    // https://developer.github.com/v3/pulls/#list-pull-requests
+    const queryString: any = {
+        sort: 'updated',
+        state: 'all',
+        direction: 'desc',
+        per_page: 100
+    };
+
+    if (filter && filter.openOnly) {
+        queryString.state = 'open';
+    }
+
+    const page: GitHubAPI.PullRequest[] = JSON.parse(await exec('GET',
+        path('repos', repo.owner, repo.name, 'pulls'),
         queryString));
     return page;
 }
