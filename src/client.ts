@@ -125,7 +125,7 @@ export async function fetchAllIssuesAndPRsRaw(repo: GitHubAPI.RepoReference, fil
 
         const thisPage: GitHubAPI.Issue[] = JSON.parse(await exec('GET',
             path('repos', repo.owner, repo.name, 'issues'),
-            queryString));
+            { queryString }));
 
         return {
             page: thisPage,
@@ -149,7 +149,7 @@ export async function fetchChangedIssuesRaw(repo: GitHubAPI.RepoReference, filte
 
     let page: GitHubAPI.Issue[] = JSON.parse(await exec('GET',
         path('repos', repo.owner, repo.name, 'issues'),
-        queryString));
+        { queryString }));
     page = page.filter(i => !i.pull_request);
     return page;
 }
@@ -169,7 +169,7 @@ export async function fetchChangedPRsRaw(repo: GitHubAPI.RepoReference, filter?:
 
     const page: GitHubAPI.PullRequestFromList[] = JSON.parse(await exec('GET',
         path('repos', repo.owner, repo.name, 'pulls'),
-        queryString));
+        { queryString }));
     return page;
 }
 
@@ -216,7 +216,7 @@ async function execPaged(path: string, perPage: number = 100, queryString: { [ke
     while (true) {
         console.log(`Fetch page ${pageNumber}...`);
         const qs = { ...queryString, page: pageNumber.toString(), per_page: perPage.toString() };
-        const page = await exec('GET', path, qs);
+        const page = await exec('GET', path, { queryString: qs });
         const arr = JSON.parse(page);
         if (!Array.isArray(arr)) {
             throw new Error("Didn't parse an array from a paged fetch");
