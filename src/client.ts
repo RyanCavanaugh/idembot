@@ -28,11 +28,11 @@ export async function getMyLogin(): Promise<string> {
 
 export async function addLabels(issue: Wrapped.Issue, labels: string[]) {
     // https://developer.github.com/v3/issues/labels/#add-labels-to-an-issue
+    const body = JSON.stringify(labels);
     await exec(
         "POST",
         path('repos', issue.repository.owner, issue.repository.name, 'issues', issue.number, 'labels'),
-        {},
-        JSON.stringify(labels)
+        { body }
     );
 }
 
@@ -48,19 +48,18 @@ export async function removeLabels(issue: Wrapped.Issue, labels: string[]) {
 
 export async function setLabels(issue: Wrapped.Issue, labels: string[]) {
     // https://developer.github.com/v3/issues/labels/#replace-all-labels-for-an-issue
+    const body = JSON.stringify(labels);
     await exec(
         "PUT",
         path('repos', issue.repository.owner, issue.repository.name, 'issues', issue.number, 'labels'),
-        {},
-        JSON.stringify(labels)
+        { body }        
     );
 }
 
 export async function lockIssue(issue: Wrapped.Issue) {
     await exec('PUT',
         path('repos', issue.repository.owner, issue.repository.name, 'issues', issue.number, 'lock'),
-        {},
-        ""
+        { body: "" }
     );
 }
 
@@ -71,34 +70,34 @@ export async function unlockIssue(issue: Wrapped.Issue) {
 }
 
 export async function closeIssue(issue: Wrapped.Issue) {
+    const body = JSON.stringify({ state: 'closed' });
     await exec('PATCH',
         path('repos', issue.repository.owner, issue.repository.name, 'issues', issue.number),
-        {},
-        JSON.stringify({ state: 'closed' })
+        { body }
     );
 }
 
 export async function reopenIssue(issue: Wrapped.Issue) {
+    const body = JSON.stringify({ state: 'open' });
     await exec('PATCH',
         path('repos', issue.repository.owner, issue.repository.name, 'issues', issue.number),
-        {},
-        JSON.stringify({ state: 'open' })
+        { body }
     );
 }
 
 export async function addComment(issue: Wrapped.Issue, body: string) {
+    const content = JSON.stringify(body);
     await exec('POST',
         path('repos', issue.repository.owner, issue.repository.name, 'issues', issue.number, 'comments'),
-        {},
-        JSON.stringify({ body })
+        { body: content }
     );
 }
 
 export async function editComment(comment: Wrapped.IssueComment, body: string) {
+    const content = JSON.stringify(body);
     await exec('PATCH',
         path('repos', comment.repository.owner, comment.repository.name, 'issues', 'comments', comment.id),
-        {},
-        JSON.stringify({ body })
+        { body: content }
     );
 }
 
@@ -155,7 +154,7 @@ export async function fetchChangedIssuesRaw(repo: GitHubAPI.RepoReference, filte
     return page;
 }
 
-export async function fetchChangedPRsRaw(repo: GitHubAPI.RepoReference, filter?: PullRequestFilter) {
+export async function fetchChangedPRsRaw(repo: GitHubAPI.RepoReference, filter?: PullRequestFilter): Promise<GitHubAPI.PullRequestFromList[]> {
     // https://developer.github.com/v3/pulls/#list-pull-requests
     const queryString: any = {
         sort: 'updated',
@@ -168,7 +167,7 @@ export async function fetchChangedPRsRaw(repo: GitHubAPI.RepoReference, filter?:
         queryString.state = 'open';
     }
 
-    const page: GitHubAPI.PullRequest[] = JSON.parse(await exec('GET',
+    const page: GitHubAPI.PullRequestFromList[] = JSON.parse(await exec('GET',
         path('repos', repo.owner, repo.name, 'pulls'),
         queryString));
     return page;
@@ -179,9 +178,36 @@ export async function fetchIssueComments(issue: Wrapped.Issue): Promise<GitHubAP
     return raw as GitHubAPI.IssueComment[];
 }
 
+export async function fetchIssueCommentReactions(repo: GitHubAPI.RepoReference, commentId: number): Promise<GitHubAPI.Reaction[]> {
+    // https://developer.github.com/v3/reactions/#list-reactions-for-an-issue-comment
+    // GET /repos/:owner/:repo/issues/comments/:id/reactions
+    const result = JSON.parse(await exec('GET', path('repos', repo.owner, repo.name, 'issues', 'comments', commentId, 'reactions')));
+    console.log(result);
+    return result;
+}
+
 export async function fetchPR(repo: GitHubAPI.RepoReference, number: number): Promise<GitHubAPI.PullRequest> {
     const result = JSON.parse(await exec('GET', path('repos', repo.owner, repo.name, 'pulls', number)));
     return result;
+}
+
+export async function fetchIssue(repo: GitHubAPI.RepoReference, number: number): Promise<GitHubAPI.Issue> {
+    const result = JSON.parse(await exec('GET', path('repos', repo.owner, repo.name, 'issues', number)));
+    return result;
+}
+
+export async function fetchPRReviews(repo: GitHubAPI.RepoReference, number: number): Promise<GitHubAPI.PullRequestReview[]> {
+    // https://developer.github.com/v3/pulls/reviews/#list-reviews-on-a-pull-request
+    // GET /repos/:owner/:repo/pulls/:number/reviews
+    const result = JSON.parse(await exec('GET', path('repos', repo.owner, repo.name, 'pulls', number, 'reviews'), { preview: "application/vnd.github.black-cat-preview+json" }));
+    return result as GitHubAPI.PullRequestReview[];
+}
+
+export async function fetchRefStatusSummary(repo: GitHubAPI.RepoReference, ref: string): Promise<GitHubAPI.CombinedStatus> {
+    // https://developer.github.com/v3/repos/statuses/#get-the-combined-status-for-a-specific-ref
+    // GET /repos/:owner/:repo/commits/:ref/status
+    const result = JSON.parse(await exec('GET', path('repos', repo.owner, repo.name, 'commits', ref, 'status')));
+    return result as GitHubAPI.CombinedStatus;
 }
 
 async function execPaged(path: string, perPage: number = 100, queryString: { [key: string]: string } = {}): Promise<{}[]> {
@@ -204,23 +230,36 @@ async function execPaged(path: string, perPage: number = 100, queryString: { [ke
 }
 
 
-export async function exec(method: string, path: string, queryString: { [key: string]: string } = {}, body?: string | undefined): Promise<string> {
+export interface ExecOptions {
+    queryString?: { [key: string]: string };
+    body?: string;
+    preview?: string;
+}
+
+var lastRateLimit = 5000;
+var lastRateLimitRemaining = 5000;
+export async function exec(method: string, path: string, opts?: ExecOptions): Promise<string> {
+    opts = opts || {};
+
     const hostname = "api.github.com";
     const headers: any = {
         "User-Agent": "RyanCavanaugh idembot",
-        "Accept": "application/vnd.github.squirrel-girl-preview+json",
+        "Accept": opts.preview || "application/vnd.github.squirrel-girl-preview+json",
         "Authorization": `token ${oauthToken}`
     };
 
-    const bodyStream = body === undefined ? undefined : Buffer.from(body);
+    const bodyStream = opts.body === undefined ? undefined : Buffer.from(opts.body);
     if (bodyStream !== undefined) {
         headers["Content-Type"] = "application/json";
         headers["Content-Length"] = bodyStream.length;
     }
 
-    const fullPath = path + '?' + Object.keys(queryString).map(k => k + '=' + encodeURIComponent(queryString[k])).join('&');
+    let fullPath = path;
+    if (opts.queryString && Object.keys(opts.queryString).length > 0) {
+        fullPath = fullPath + '?' + Object.keys(opts.queryString).map(k => k + '=' + encodeURIComponent(opts!.queryString![k])).join('&');
+    }
 
-    console.log(`HTTPS: ${method} https://${hostname}${fullPath}`);
+    console.log(`[${lastRateLimitRemaining} / ${lastRateLimit}] HTTPS: ${method} https://${hostname}${fullPath}`);
 
     return new Promise<string>((resolve, reject) => {
         const req = https.request({
@@ -230,11 +269,14 @@ export async function exec(method: string, path: string, queryString: { [key: st
             hostname,
         }, res => {
             // console.log('Headers: ' + JSON.stringify(res.headers, undefined, 2));
+            lastRateLimit = +(res.headers['x-ratelimit-limit']);
+            lastRateLimitRemaining = +(res.headers['x-ratelimit-remaining']);
             if (res.statusCode! >= 400) {
                 console.log(`Error! Status code ${res.statusCode} returned`);
                 reject(`Status code ${res.statusCode} returned`);
                 return;
             }
+            
             res.setEncoding('utf8');
             var data = '';
             res.on('data', chunk => {

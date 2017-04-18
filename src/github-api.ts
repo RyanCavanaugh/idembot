@@ -19,6 +19,12 @@ namespace GitHubAPI {
 
     // https://developer.github.com/v3/reactions/#reaction-types
     export type ReactionType = "+1" | "-1" | "laugh" | "confused" | "heart" | "hooray";
+    export interface Reaction {
+        id: number;
+        user: User;
+        content: ReactionType;
+        created_at: string;
+    }
 
     // TODO: Remainder of reaction API
 
@@ -58,6 +64,57 @@ namespace GitHubAPI {
     }
 
     /**
+     * When the GitHub API lists PRs, it includes some (but not all) PR-specific fields.
+     */
+    export interface PullRequestFromList extends Issue {
+        merged_at: string | null;
+        merge_commit_sha: string;
+
+        url: string;
+        repository_url: string;
+        labels_url: string;
+        comments_url: string;
+        events_url: string;
+        html_url: string;
+        id: number;
+        number: number;
+        title: string;
+        body: string;
+        user: User;
+        state: "open" | "closed";
+        locked: boolean;
+        assignee: User | null;
+        assignees: User[];
+        milestone: Milestone | null;
+        comments: number;
+        created_at: string;
+        updated_at: string;
+        closed_at: string | null;
+
+        // Sometimes (!) appears
+        repository?: Repository;
+
+        pull_request?: {
+            url: string;
+            html_url: string;
+            diff_url: string;
+            patch_url: string;
+        }
+
+    }
+
+    export interface PullRequestReview {
+        id: number;
+        user: User;
+        body: string;
+        commit_id: string;
+        state: "APPROVED" | "???";
+
+        html_url: string;
+        pull_request_url: string;
+    }
+
+    /**
      * dirty: Merge conflict. Merging will be blocked
      * unknown: Mergeability was not checked yet. Merging will be blocked
      * blocked: Blocked by a failing/missing required status check.
@@ -67,8 +124,7 @@ namespace GitHubAPI {
      * clean: No conflicts, everything good. Merging is allowed (green box).
      */
     export type MergeableState = "dirty" | "unknown" | "blocked" | "behind" | "unstable" | "has_hooks" | "clean";
-    export interface PullRequest extends Issue {
-        merge_commit_sha: string;
+    export interface PullRequest extends PullRequestFromList {
         merged: boolean;
         /** Mergeable is null if it's not computed yet */
         mergeable: boolean | null;
@@ -83,15 +139,33 @@ namespace GitHubAPI {
         maintainer_can_modify: boolean;
         statuses_url: string;
         // TODO: Spec out
-        head: void;
-        base: void;
+        head: Commit;
+        base: Commit;
+
+        review_comments: number;
+    }
+
+    export interface Commit {
+        label: string;
+        ref: string;
+        sha: string;
+        user: User;
+        repo: Repository;
+    }
+
+    export type StatusSummary = "success" | "pending" | "failure";
+    /// https://developer.github.com/v3/repos/statuses/
+    export interface CombinedStatus {
+        state: StatusSummary;
+        sha: string;
+        total_count: number;
     }
 
     // e.g. from https://api.github.com/repos/DefinitelyTyped/DefinitelyTyped/statuses/210d1978139c51386a145af2c36440b3967535e9
     export interface CommitStatusesElement {
         url: string;
         id: number;
-        state: "success" | "pending" | "failure";
+        state: StatusSummary;
         description: string;
         target_url: string;
         context: string;

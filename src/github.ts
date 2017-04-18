@@ -1,3 +1,5 @@
+import sleep = require('sleep-promise');
+
 import * as client from './client';
 import WeakStringMap from './weak-string-map';
 import { addAction } from './actionRunner';
@@ -115,6 +117,12 @@ export class IssueComment {
             repository: parseRepoReference(data.issue_url)
         });
     }
+
+    async getReactions(): Promise<GitHubAPI.Reaction[]> {
+        // GET /repos/:owner/:repo/issues/comments/:id/reactions
+        const reactions = await client.fetchIssueCommentReactions(parseRepoReference(this.originalData.url), this.id);
+        return reactions;
+    }
 }
 
 export class Milestone {
@@ -185,7 +193,7 @@ export class Repository {
 export abstract class IssueOrPullRequest {
     static async fromData(data: GitHubAPI.Issue): Promise<Issue | PullRequest> {
         if (data.pull_request) {
-            return await PullRequest.fromIssueOrPRData(data);
+            return await PullRequest.fromReference(parseRepoReference(data.url), data.number);
         } else {
             return await Issue.fromIssueData(data);
         }
@@ -317,13 +325,15 @@ export abstract class IssueOrPullRequest {
      * issue.setHasLabels({
      *  "Needs Info": false,
      *  "Ready for Triage": true
-     * })
+     * }).
+     * You can specify a null value to cause nothing to happen either way
      */
-    setHasLabels(labelMap: { [key: string]: boolean }) {
+    setHasLabels(labelMap: { [key: string]: boolean | null }) {
         for (const key of Object.keys(labelMap)) {
-            if (labelMap[key]) {
+            const value = labelMap[key];
+            if (value === true) {
                 this.addLabel(key);
-            } else {
+            } else if (value === false) {
                 this.removeLabel(key);
             }
         }
@@ -377,31 +387,46 @@ export class Issue extends IssueOrPullRequest {
     }
 }
 
+export type StatusSummary = "pass" | "fail" | "pending";
 export class PullRequest extends IssueOrPullRequest {
     static async fromReference(repo: GitHubAPI.RepoReference, number: number): Promise<PullRequest> {
-        return new PullRequest(await client.fetchPR(repo, number));
+        return new PullRequest(await client.fetchPR(repo, number), await client.fetchIssue(repo, number));
     }
 
     static fromData(data: GitHubAPI.Issue): never {
         throw new Error("Don't call me");
     }
 
+    static getPRCacheKey(repo: GitHubAPI.RepoReference, number: number, isPR: boolean) {
+        return IssueOrPullRequest.getCacheKeyBasePath(repo, number, isPR) + 'pr.json';
+    }
+
     // TODO interning
-    static async fromIssueOrPRData(data: GitHubAPI.Issue): Promise<PullRequest> {
-        if ((data as GitHubAPI.PullRequest).changed_files === undefined) {
-            const repo = parseRepoReference(data.url);
-            const prData: GitHubAPI.PullRequest = await client.fetchPR(repo, data.number);
-            return PullRequest.fromPullRequestData(prData);
-        } else {
-            return PullRequest.fromPullRequestData(data as GitHubAPI.PullRequest);
+    static async fromIssueAndPRData(prData: GitHubAPI.PullRequest, issueData: GitHubAPI.Issue): Promise<PullRequest> {
+        const issueKey = this.getCacheKey(parseRepoReference(prData.url), prData.number, true);
+        const prKey = this.getPRCacheKey(parseRepoReference(prData.url), prData.number, true);
+
+        if (cache) {
+            const prCached = await cache.load(prKey);
+            const issueCached = await cache.load(issueKey);
+            if (prCached.exists && issueCached.exists) {
+                const cachedPR = prCached.content as GitHubAPI.PullRequest;
+                const cachedIssue = issueCached.content as GitHubAPI.Issue;
+                if (cachedPR.updated_at === prData.updated_at) {
+                    return PullRequest.fromPullRequestData(cachedPR, cachedIssue);
+                }
+            }
         }
+
+        return PullRequest.fromPullRequestData(prData, issueData);
     }
 
     // TODO interning
-    static fromPullRequestData(data: GitHubAPI.PullRequest) {
-        return new PullRequest(data);
+    static fromPullRequestData(prData: GitHubAPI.PullRequest, issueData: GitHubAPI.Issue) {
+        return new PullRequest(prData, issueData);
     }
 
+    head: GitHubAPI.Commit;
     merge_commit_sha: string;
     merged: boolean;
     mergeable: boolean | null;
@@ -415,20 +440,50 @@ export class PullRequest extends IssueOrPullRequest {
 
     readonly isPullRequest: boolean = true;
 
-    private constructor(data: GitHubAPI.PullRequest) {
-        super(data);
+    private constructor(prData: GitHubAPI.PullRequest, issueData: GitHubAPI.Issue) {
+        super(issueData);
 
         Object.assign(this, {
-            merge_commit_sha: data.merge_commit_sha,
-            merged: data.merged,
-            mergeable: data.mergeable,
-            mergeable_state: data.mergeable_state,
-            comments: data.comments,
-            commits: data.commits,
-            additions: data.additions,
-            deletions: data.deletions,
-            changed_files: data.changed_files
+            merge_commit_sha: prData.merge_commit_sha,
+            merged: prData.merged,
+            mergeable: prData.mergeable,
+            mergeable_state: prData.mergeable_state,
+            comments: prData.comments,
+            commits: prData.commits,
+            additions: prData.additions,
+            deletions: prData.deletions,
+            changed_files: prData.changed_files,
+            head: prData.head
         });
+    }
+
+    public async getStatusSummary(): Promise<GitHubAPI.StatusSummary> {
+        // GET /repos/:owner/:repo/commits/:ref/status
+        return (await client.fetchRefStatusSummary(this.repository.reference, this.head.sha)).state;
+    }
+
+    public async getReviews(): Promise<GitHubAPI.PullRequestReview[]> {
+        return await client.fetchPRReviews(this.repository.reference, this.number);
+    }
+
+    public async getMergeableState(): Promise<boolean | null> {
+        if (this.merged) {
+            return null;
+        }
+
+        var retryCounter = 5;
+        while (this.mergeable === null && retryCounter > 0) {
+            const newData = await client.fetchPR(this.repository.reference, this.number);;
+            if (newData.mergeable === null) {
+                console.log(`Sleep 3 seconds and try to get real mergeable state of ${this.number}`);
+                await sleep(3000);
+                retryCounter--;
+            } else {
+                this.mergeable = newData.mergeable;
+                break;
+            }
+        }
+        return this.mergeable;
     }
 }
 

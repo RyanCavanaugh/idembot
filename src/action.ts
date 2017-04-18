@@ -90,7 +90,7 @@ export namespace Labels {
             const labelsToRemove = this.labels.filter(lab => this.issue.hasLabel(lab));
             if (labelsToRemove.length === 0) return;
             await this.fireOnBeforeChange();
-            await client.removeLabels(this.issue, labelsToRemove);
+            await client.removeLabels(this.issue, this.labels);
             await this.fireOnChanged();
         }
     }

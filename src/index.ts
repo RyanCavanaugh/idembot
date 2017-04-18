@@ -8,6 +8,8 @@ import { createCache } from './cache';
 import { runActions } from './actionRunner';
 import { SetupOptions, CommandLineOptions, IssueFilter } from './options';
 import { User, Issue, PullRequest, Milestone, Label, IssueOrPullRequest } from './github';
+import * as GitHubWrapper from './github';
+
 export { User, Issue, PullRequest, Milestone, Label, IssueOrPullRequest } from './github';
 
 process.on('unhandledRejection', (err: any) => {
@@ -19,6 +21,7 @@ const defaultFilter: IssueFilter = { };
 export default function bot(repoOwner: string, repoName: string, opts: SetupOptions & CommandLineOptions, oauthToken: string) {
     const cache = createCache(opts.cacheRoot);
     client.initialize(oauthToken);
+    GitHubWrapper.useCache(cache);    
 
     async function updateCache() {
         for (const repo of opts.repos) {
@@ -35,10 +38,20 @@ export default function bot(repoOwner: string, repoName: string, opts: SetupOpti
             logger.info(`Syncing PR/issue cache for ${repo.owner}/${repo.name}`);
             await updateCache();
 
-            const issueResults = (((opts.rules.issues || opts.rules.issuesAndPullRequests) && await client.fetchChangedIssuesRaw(repo)) || []).map(i => Issue.fromData(i));
-            const prResults = (((opts.rules.pullRequests || opts.rules.issuesAndPullRequests) && await client.fetchChangedPRsRaw(repo)) || []).map(pr => PullRequest.fromReference(repo, pr.number));
+            let issues: Issue[] = [];
+            let prs: PullRequest[] = [];
+            if (opts.rules.issues || opts.rules.issuesAndPullRequests) {
+                issues = (await client.fetchChangedIssuesRaw(repo)).map(i => Issue.fromData(i));
+            }
 
-            const issuesAndPRs: Array<Issue | PullRequest> = [...issueResults, ...prResults];
+            if (opts.rules.pullRequests || opts.rules.issuesAndPullRequests) {
+                let rawPRs = await client.fetchChangedPRsRaw(repo, repo.prFilter);
+                for(const raw of rawPRs) {
+                    prs.push(await PullRequest.fromReference(repo, raw.number));
+                }
+            }
+
+            const issuesAndPRs: Array<Issue | PullRequest> = [...issues, ...prs];
 
             console.log(`Running rules on ${repo.owner}/${repo.name}...`);
             if (opts.rules.issues) {
