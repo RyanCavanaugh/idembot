@@ -22,7 +22,15 @@ function parseDate(s: string | null): moment.Moment | null {
     return moment(new Date(s));
 }
 
-export function parseRepoReference(url: string) {
+export function parseBasicRepoReference(ownerSlashName: string) {
+    const m = /(\w+)\/(\w+)/.exec(ownerSlashName);
+    if (!m) {
+        throw new Error(`Expected "${ownerSlashName}" to be in format "owner/name"`);
+    }
+    return Repository.create(m[1], m[2]);
+}
+
+export function parseRepoReferenceFromURL(url: string) {
     // https://api.github.com/repos/octocat/Hello-World/something
     const regex = /^https:\/\/[^\/]+\/repos\/([^\/]+)\/([^\/]+)/;
     const match = regex.exec(url);
@@ -114,13 +122,13 @@ export class IssueComment {
             created_at: parseDate(data.created_at),
             updated_at: parseDate(data.updated_at),
             body: data.body,
-            repository: parseRepoReference(data.issue_url)
+            repository: parseRepoReferenceFromURL(data.issue_url)
         });
     }
 
     async getReactions(): Promise<GitHubAPI.Reaction[]> {
         // GET /repos/:owner/:repo/issues/comments/:id/reactions
-        const reactions = await client.fetchIssueCommentReactions(parseRepoReference(this.originalData.url), this.id);
+        const reactions = await client.fetchIssueCommentReactions(parseRepoReferenceFromURL(this.originalData.url), this.id);
         return reactions;
     }
 }
@@ -193,7 +201,7 @@ export class Repository {
 export abstract class IssueOrPullRequest {
     static async fromData(data: GitHubAPI.Issue): Promise<Issue | PullRequest> {
         if (data.pull_request) {
-            return await PullRequest.fromReference(parseRepoReference(data.url), data.number);
+            return await PullRequest.fromReference(parseRepoReferenceFromURL(data.url), data.number);
         } else {
             return await Issue.fromIssueData(data);
         }
@@ -262,7 +270,7 @@ export abstract class IssueOrPullRequest {
             html_url: originalData.html_url
         });
 
-        this.repository = parseRepoReference(originalData.url);
+        this.repository = parseRepoReferenceFromURL(originalData.url);
 
         // Parse some dates
         this.created_at = parseDate(originalData.created_at);
@@ -389,7 +397,7 @@ export class Issue extends IssueOrPullRequest {
 
 export type StatusSummary = "pass" | "fail" | "pending";
 export class PullRequest extends IssueOrPullRequest {
-    static async fromReference(repo: GitHubAPI.RepoReference, number: number): Promise<PullRequest> {
+    static async fromReference(repo: GitHubAPI.RepoReference, number: number | string): Promise<PullRequest> {
         return new PullRequest(await client.fetchPR(repo, number), await client.fetchIssue(repo, number));
     }
 
@@ -403,8 +411,8 @@ export class PullRequest extends IssueOrPullRequest {
 
     // TODO interning
     static async fromIssueAndPRData(prData: GitHubAPI.PullRequest, issueData: GitHubAPI.Issue): Promise<PullRequest> {
-        const issueKey = this.getCacheKey(parseRepoReference(prData.url), prData.number, true);
-        const prKey = this.getPRCacheKey(parseRepoReference(prData.url), prData.number, true);
+        const issueKey = this.getCacheKey(parseRepoReferenceFromURL(prData.url), prData.number, true);
+        const prKey = this.getPRCacheKey(parseRepoReferenceFromURL(prData.url), prData.number, true);
 
         if (cache) {
             const prCached = await cache.load(prKey);
@@ -464,6 +472,10 @@ export class PullRequest extends IssueOrPullRequest {
 
     public async getReviews(): Promise<GitHubAPI.PullRequestReview[]> {
         return await client.fetchPRReviews(this.repository.reference, this.number);
+    }
+
+    public async getCommitsRaw(): Promise<GitHubAPI.PullRequestCommit[]> {
+        return await client.fetchPRCommits(this);
     }
 
     public async getMergeableState(): Promise<boolean | null> {

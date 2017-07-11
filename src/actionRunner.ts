@@ -1,5 +1,5 @@
 import { IAction, IActionImplementation, ActionExecuteInfo } from './action';
-import { SetupOptions, CommandLineOptions } from './options';
+import { SetupOptions, ParsedCommandLineOptions } from './options';
 
 export function addAction(action: IAction) {
     currentActionList.push(action);
@@ -8,7 +8,7 @@ export function addAction(action: IAction) {
 
 const currentActionList: IAction[] = [];
 
-export async function runActions(info: ActionExecuteInfo, opts: SetupOptions & CommandLineOptions) {
+export async function runActions(info: ActionExecuteInfo, opts: ParsedCommandLineOptions) {
     while (currentActionList.length> 0) {
         const next = currentActionList.shift()! as IActionImplementation;
         console.log(`Execute action: ${next.summary} ${opts.dry ? "(dry)" : ""}`);

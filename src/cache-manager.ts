@@ -1,10 +1,11 @@
 import * as client from './client';
 import { Cache } from './cache';
 import { Repository, IssueOrPullRequest } from './github';
-import { IssueFilter, RepoOptions } from './options';
-import * as logger from 'winston';
+import { Cache as CacheLog } from './logging';
 
-export default async function syncRepoCache(cache: Cache, repo: GitHubAPI.RepoReference & RepoOptions): Promise<void> {
+const log = CacheLog.log;
+
+export default async function syncRepoCache(cache: Cache, repo: GitHubAPI.RepoReference): Promise<void> {
     // Cache updating algorithm:
     //  1. Get the first 100 recently changed issues
     //  2. Run through this list, newest first, checking timestamps against the local cache
@@ -12,11 +13,11 @@ export default async function syncRepoCache(cache: Cache, repo: GitHubAPI.RepoRe
     //  4. If we exhaust the list, we are too out-of-date and need to do a full fetch
 
     if (!updateCache()) {
-        logger.info(`Cache is too far out of date; running a full issue fetch`);
+        log(`Cache is too far out of date; running a full issue fetch`);
         await fullFetch();
-        logger.info(`Full issue fetch complete`);
+        log(`Full issue fetch complete`);
     } else {
-        logger.info(`Sync completed`);
+        log(`Sync completed`);
     }
 
     /**
@@ -24,7 +25,7 @@ export default async function syncRepoCache(cache: Cache, repo: GitHubAPI.RepoRe
      */
     async function updateCache(): Promise<boolean> {
         const now = new Date();
-        let page1 = await client.fetchChangedIssuesRaw(repo, repo);
+        let page1 = await client.fetchChangedIssuesRaw(repo);
         let lastWasUpToDate = false;
         for (const issue of page1) {
             const key = IssueOrPullRequest.getCacheKey(repo, issue.number, !!issue.pull_request);
@@ -51,7 +52,6 @@ export default async function syncRepoCache(cache: Cache, repo: GitHubAPI.RepoRe
             await cache.save(issue, key, now);
         }
     }
-
 
     async function fullFetch() {
         let now = new Date();

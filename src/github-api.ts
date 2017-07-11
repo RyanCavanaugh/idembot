@@ -145,6 +145,27 @@ namespace GitHubAPI {
         review_comments: number;
     }
 
+    export interface PullRequestCommit {
+        url: string;
+        sha: string;
+        commit: {
+            author: Committer;
+            committer: Committer;
+        };
+        author: User;
+        committer: User;
+        parents: {
+            url: string;
+            sha: string;
+        }[];
+    }
+
+    export interface Committer {
+        name: string;
+        email: string;
+        date: string;
+    }
+
     export interface Commit {
         label: string;
         ref: string;
@@ -153,7 +174,7 @@ namespace GitHubAPI {
         repo: Repository;
     }
 
-    export type StatusSummary = "success" | "pending" | "failure";
+    export type StatusSummary = "success" | "pending" | "failure" | "error";
     /// https://developer.github.com/v3/repos/statuses/
     export interface CombinedStatus {
         state: StatusSummary;
