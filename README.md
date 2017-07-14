@@ -17,6 +17,8 @@
 * Close issues labelled "needs response" that don't receive a response within 2 weeks
 * Re-open that issue when the original poster leaves a new comment
 
+<!--
+
 # Walkthrough: Keeping the CTO Happy
 
 Let's look at an example of how you might use idembot to automate part of your workflow.
@@ -78,3 +80,5 @@ The `onChanged` event fires if any label is added or removed.
 Actions.setLabels('urgent', 'question');
 ```
 
+
+>
