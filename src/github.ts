@@ -470,12 +470,21 @@ export class PullRequest extends IssueOrPullRequest {
         return (await client.fetchRefStatusSummary(this.repository.reference, this.head.sha)).state;
     }
 
+    public async getStatus(): Promise<GitHubAPI.CombinedStatus> {
+        // GET /repos/:owner/:repo/commits/:ref/status
+        return (await client.fetchRefStatusSummary(this.repository.reference, this.head.sha));
+    }
+
     public async getReviews(): Promise<GitHubAPI.PullRequestReview[]> {
         return await client.fetchPRReviews(this.repository.reference, this.number);
     }
 
     public async getCommitsRaw(): Promise<GitHubAPI.PullRequestCommit[]> {
         return await client.fetchPRCommits(this);
+    }
+
+    public async getFilesRaw(): Promise<GitHubAPI.PullRequestFile[]> {
+        return await client.fetchPRFiles(this);
     }
 
     public async getMergeableState(): Promise<boolean | null> {

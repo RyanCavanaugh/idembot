@@ -108,8 +108,8 @@ namespace GitHubAPI {
         user: User;
         body: string;
         commit_id: string;
-        state: "APPROVED" | "???";
-
+        state: "APPROVED" | "CHANGES_REQUESTED" | "COMMENTED";
+        submitted_at: string;
         html_url: string;
         pull_request_url: string;
     }
@@ -143,6 +143,15 @@ namespace GitHubAPI {
         base: Commit;
 
         review_comments: number;
+    }
+
+    export interface PullRequestFile {
+        sha: string;
+        filename: string;
+        status: "added" | "modified" | "removed";
+        additions: number;
+        deletions: number;
+        changes: number;
     }
 
     export interface PullRequestCommit {

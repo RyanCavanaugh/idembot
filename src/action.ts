@@ -125,13 +125,11 @@ export namespace Comments {
     }
 
     function makeHeader(header: CommentHeader) {
-        // return `<!-- 🤖🔊 ${JSON.stringify(header)} 🔊🤖 -->`;
         return `<!--header ${JSON.stringify(header)} headerend-->`;
     }
 
     function makeFooter() {
-        // return `<!-- 🤖🔈 potent-bot @ ${(new Date()).toLocaleString()} 🔈🤖 -->`;
-        return `<!--footer potent-bot @ ${(new Date()).toLocaleString()} footerend-->`;
+        return `<!--footer bot @ ${(new Date()).toLocaleString()} footerend-->`;
     }
 
     function makeComment(slug: string, body: string) {
@@ -139,7 +137,6 @@ export namespace Comments {
     }
 
     function getBody(comment: IssueComment) {
-        //const regex = /🔊🤖 -->\r?\n(.*)\r?\n<!-- 🤖🔈/;
         const regex = /headerend-->\r?\n(.*)\r?\n<!--footer/;
         const match = regex.exec(comment.body);
         if (match) {
@@ -257,6 +254,5 @@ export namespace Issues {
                 await this.fireOnChanged();
             }
         }
-
     }
 }

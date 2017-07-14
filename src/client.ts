@@ -52,7 +52,7 @@ export async function setLabels(issue: Wrapped.Issue, labels: string[]) {
     await exec(
         "PUT",
         path('repos', issue.repository.owner, issue.repository.name, 'issues', issue.number, 'labels'),
-        { body }        
+        { body }
     );
 }
 
@@ -86,18 +86,16 @@ export async function reopenIssue(issue: Wrapped.Issue) {
 }
 
 export async function addComment(issue: Wrapped.Issue, body: string) {
-    const content = JSON.stringify(body);
     await exec('POST',
         path('repos', issue.repository.owner, issue.repository.name, 'issues', issue.number, 'comments'),
-        { body: content }
+        { body: JSON.stringify({ body }) }
     );
 }
 
 export async function editComment(comment: Wrapped.IssueComment, body: string) {
-    const content = JSON.stringify(body);
     await exec('PATCH',
         path('repos', comment.repository.owner, comment.repository.name, 'issues', 'comments', comment.id),
-        { body: content }
+        { body: JSON.stringify({ body }) }
     );
 }
 
@@ -161,9 +159,10 @@ export async function runQuery(q: Query, callback: (item: PullRequest | Issue) =
                 page: pageNumber
             };
 
+            const ref = parseBasicRepoReference(q.repo);
             const page: GitHubAPI.PullRequestFromList[] = JSON.parse(await exec('GET',
-                path('repos', q.repo, 'pulls'),
-                { queryString }));            
+                path('repos', ref.owner, ref.name, 'pulls'),
+                { queryString }));
             for (const item of page) {
                 const pr = await PullRequest.fromReference(repo, item.number);
                 await callback(pr);
@@ -203,6 +202,11 @@ export async function fetchIssueComments(issue: Wrapped.Issue): Promise<GitHubAP
 export async function fetchPRCommits(issue: Wrapped.PullRequest): Promise<GitHubAPI.PullRequestCommit[]> {
     const raw = await execPaged(path('repos', issue.repository.owner, issue.repository.name, 'pulls', issue.number, 'commits'));
     return raw as GitHubAPI.PullRequestCommit[];
+}
+
+export async function fetchPRFiles(issue: Wrapped.PullRequest): Promise<GitHubAPI.PullRequestFile[]> {
+    const raw = await execPaged(path('repos', issue.repository.owner, issue.repository.name, 'pulls', issue.number, 'files'));
+    return raw as GitHubAPI.PullRequestFile[];
 }
 
 export async function fetchIssueCommentReactions(repo: GitHubAPI.RepoReference, commentId: number): Promise<GitHubAPI.Reaction[]> {
@@ -303,7 +307,7 @@ export async function exec(method: string, path: string, opts?: ExecOptions): Pr
                 reject(`Status code ${res.statusCode} returned`);
                 return;
             }
-            
+
             res.setEncoding('utf8');
             var data = '';
             res.on('data', chunk => {

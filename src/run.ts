@@ -10,7 +10,7 @@ import { Issue } from './github';
 const oauth = process.env['AUTH_TOKEN'];
 
 async function parseQueryFile(filename: string): Promise<Query> {
-    return parseQuery(await fs.readFile(filename, 'utf-8'));
+    return parseQuery(JSON.parse(await fs.readFile(filename, 'utf-8')));
 }
 
 async function main(argv: string[]) {
