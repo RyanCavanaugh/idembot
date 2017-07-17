@@ -229,7 +229,7 @@ export async function moveProjectCard(card: Wrapped.ProjectCard, targetColumn: W
 }
 
 export async function deleteProjectCard(card: Wrapped.ProjectCard): Promise<void> {
-    await exec('DELETE', path('projects/columns/', card.id),
+    await exec('DELETE', path('projects', 'columns', 'cards', card.id),
         {
             preview: ProjectsPreview
         }
