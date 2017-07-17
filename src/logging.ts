@@ -6,7 +6,7 @@ export interface Log {
 
 export function get(groupName: string): Log {
     return {
-        log: (message: string, data?: any) => bragi.log(message, data)
+        log: (message: string, data?: any) =>  console.log(message)// bragi.log(message, data)
     };
 }
 

@@ -194,6 +194,49 @@ export async function fetchChangedPRsRaw(repo: GitHubAPI.RepoReference): Promise
     return page;
 }
 
+const ProjectsPreview = "application/vnd.github.inertia-preview+json"
+
+export async function fetchProjectColumns(projectId: number): Promise<GitHubAPI.ProjectColumn[]> {
+    const raw = await exec('GET', path('projects', projectId, 'columns'), { preview: ProjectsPreview });
+    return JSON.parse(raw) as GitHubAPI.ProjectColumn[];
+}
+
+export async function fetchProjectColumnCards(columnId: number): Promise<GitHubAPI.ProjectColumnCard[]> {
+    const raw = await exec('GET', path('projects', 'columns', columnId, 'cards'), { preview: ProjectsPreview });
+    return JSON.parse(raw) as GitHubAPI.ProjectColumnCard[];
+}
+
+export async function createProjectCard(columnId: number, issue: Wrapped.IssueOrPullRequest): Promise<void> {
+    const body = JSON.stringify({ content_id: issue.id, content_type: 'Issue' });
+    await exec('POST', path('projects', 'columns', columnId, 'cards'),
+        {
+            preview: ProjectsPreview,
+            body
+        }
+    );
+}
+
+export async function moveProjectCard(card: Wrapped.ProjectCard, targetColumn: Wrapped.ProjectColumn): Promise<void> {
+    await exec('POST', path('projects', 'columns', 'cards', card.id, 'moves'),
+        {
+            preview: ProjectsPreview,
+            body: JSON.stringify({
+                position: 'bottom',
+                column_id: targetColumn.columnId
+            })
+        }
+    );
+}
+
+export async function deleteProjectCard(card: Wrapped.ProjectCard): Promise<void> {
+    await exec('DELETE', path('projects/columns/', card.id),
+        {
+            preview: ProjectsPreview
+        }
+    );
+}
+
+
 export async function fetchIssueComments(issue: Wrapped.Issue): Promise<GitHubAPI.IssueComment[]> {
     const raw = await execPaged(path('repos', issue.repository.owner, issue.repository.name, 'issues', issue.number, 'comments'));
     return raw as GitHubAPI.IssueComment[];

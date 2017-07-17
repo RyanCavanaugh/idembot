@@ -10,7 +10,7 @@ import { SetupOptions, ParsedCommandLineOptions } from './options';
 import { Query, PRQuery, IssueQuery } from './options';
 import * as GitHubWrapper from './github';
 import { User, Issue, PullRequest, Milestone, Label, IssueOrPullRequest } from './github';
-export { User, Issue, PullRequest, Milestone, Label, IssueOrPullRequest } from './github';
+export { User, Issue, PullRequest, Milestone, Label, IssueOrPullRequest, Project, ProjectCard, ProjectColumn } from './github';
 
 const log = logging.get('idembot').log;
 

@@ -225,6 +225,8 @@ export abstract class IssueOrPullRequest {
 
     /** This is the actual user-facing number */
     readonly number: number;
+    /** An internal GitHub ID number */
+    readonly id: number;
     /** Title */
     readonly title: string;
     /** The main body of the issue */
@@ -263,6 +265,7 @@ export abstract class IssueOrPullRequest {
         // Copy some fields
         Object.assign(this, {
             number: originalData.number,
+            id: originalData.id,
             title: originalData.title,
             body: originalData.body,
             state: originalData.state,
@@ -439,7 +442,7 @@ export class PullRequest extends IssueOrPullRequest {
     merged: boolean;
     mergeable: boolean | null;
     mergeable_state: GitHubAPI.MergeableState;
-    
+
     comments: number;
     commits: number;
     additions: number;
@@ -508,6 +511,95 @@ export class PullRequest extends IssueOrPullRequest {
     }
 }
 
+export class Project {
+    public static async create(projectId: number) {
+        const columnsRaw = await client.fetchProjectColumns(projectId);
+        const columns: ProjectColumn[] = [];
+        for (const raw of columnsRaw) {
+            columns.push(await ProjectColumn.create(raw.id, raw.name));
+        }
+        return new Project(projectId, columns);
+    }
+
+    private constructor(public projectId: number, public columns: ProjectColumn[]) {
+    }
+
+    public setIssueColumn(issue: IssueOrPullRequest, targetColumn: ProjectColumn | undefined) {
+        return addAction(new Actions.Issues.SetColumn(issue, this, targetColumn));
+    }
+
+    public async doSetIssueColumn(issue: IssueOrPullRequest, targetColumn: ProjectColumn | undefined): Promise<void> {
+        for (const sourceColumn of this.columns) {
+            const card = sourceColumn.findProjectCardForIssue(issue);
+            if (card !== undefined) {
+                if (targetColumn === undefined) {
+                    await client.deleteProjectCard(card);
+                } else {
+                    if (targetColumn.columnId !== sourceColumn.columnId) {
+                        await client.moveProjectCard(card, targetColumn);
+                    }
+                    return;
+                }
+            }
+        }
+
+        if (targetColumn !== undefined) {
+            await client.createProjectCard(targetColumn.columnId, issue);
+        }
+    }
+
+    public findColumnByName(name: string | RegExp): ProjectColumn | undefined {
+        for(const c of this.columns) {
+            if (typeof name === 'string') {
+                if (c.name === name) {
+                    return c;
+                }
+            } else if(name.test(c.name)) {
+                return c;
+            }
+        }
+        return undefined;
+    }
+}
+
+export class ProjectColumn {
+    public static async create(columnId: number, name: string) {
+        const cards = await client.fetchProjectColumnCards(columnId);
+        return new ProjectColumn(columnId, name, cards);
+    }
+
+    public cards: ProjectCard[];
+
+    private constructor(public columnId: number, public name: string, cards: GitHubAPI.ProjectColumnCard[]) {
+        this.cards = cards.map(c => new ProjectCard(c));
+    }
+
+    public findProjectCardForIssue(issue: IssueOrPullRequest): ProjectCard | undefined {
+        for (const card of this.cards) {
+            if (issue.number === card.getIssueNumber()) {
+                return card;
+            }
+        }
+        return undefined;
+    }
+}
+
+export class ProjectCard {
+    public id: number;
+    constructor(private data: GitHubAPI.ProjectColumnCard) {
+        this.id = data.id;
+    }
+
+    public getIssueNumber(): number | undefined {
+        // https://api.github.com/repos/DefinitelyTyped/DefinitelyTyped/issues/17902
+        const match = /https:\/\/api.github.com\/repos\/\S+\/\S+\/issues\/(\d+)/.exec(this.data.content_url);
+        if (match === null) {
+            return undefined;
+        } else {
+            return +(match[1]);
+        }
+    }
+}
 
 interface PoolSettings<KeyType, DataType, InstanceType> {
     /** Class constructor for creating a new InstanceType */
@@ -548,7 +640,7 @@ function createPool<InstanceType extends { update(d: DataType): void }, DataType
             cache && cache.save(data, cacheKey, now);
             return settings.construct(data);
         },
-        fromData: function(data: DataType) {
+        fromData: function (data: DataType) {
             const keyString = settings.keyToString!(settings.keyFromData(data));
             const extant = pool.get(keyString);
             if (extant) {
@@ -558,7 +650,7 @@ function createPool<InstanceType extends { update(d: DataType): void }, DataType
             const result = settings.construct(data);
             pool.set(keyString, result);
             return result;
-            
+
         }
     });
 }

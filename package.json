@@ -29,7 +29,7 @@
     "@types/mkdirp": "^0.3.29",
     "@types/moment": "^2.13.0",
     "@types/mz": "0.0.30",
-    "@types/node": "^7.0.34",
+    "@types/node": "^7.0.38",
     "@types/request": "0.0.41",
     "@types/winston": "^2.3.3",
     "bragi": "^0.1.3",

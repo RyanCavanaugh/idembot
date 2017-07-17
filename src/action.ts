@@ -1,7 +1,11 @@
 import * as client from './client';
 import { addAction } from './actionRunner';
 
-import { Issue, IssueComment, IssueOrPullRequest, PullRequest, User, Label, Milestone } from './github';
+import {
+    Issue, IssueComment, IssueOrPullRequest, PullRequest,
+    User, Label, Milestone,
+    Project, ProjectColumn
+} from './github';
 
 export type Logger = {};
 export type OnChangeHandler = (item: IssueOrPullRequest) => void;
@@ -202,6 +206,20 @@ export namespace Assignees {
 }
 
 export namespace Issues {
+    export class SetColumn extends BaseIssueAction {
+        get summary() {
+            return `Move issue ${this.issue.fullName} to column ${this.column ? this.column.name : '(none)'} in project ${this.project.projectId}`;
+        }
+
+        constructor(issue: IssueOrPullRequest, public project: Project, public column: ProjectColumn | undefined) {
+            super(issue);
+        }
+
+        async execute(info: ActionExecuteInfo) {
+            await this.project.doSetIssueColumn(this.issue, this.column);
+        }
+    }
+
     export class Lock extends BaseIssueAction {
         get summary() {
             return `Lock issue ${this.issue.fullName}`;

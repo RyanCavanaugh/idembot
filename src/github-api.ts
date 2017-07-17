@@ -372,4 +372,24 @@ namespace GitHubAPI {
         updated_at: string;
         body: string;
     }
+
+    export interface Project {
+        id: number;
+        name: string;
+        body: string;
+        number: number;
+        state: string;
+    }
+
+    export interface ProjectColumn {
+        id: number;
+        name: string;
+    }
+
+    export interface ProjectColumnCard {
+        id: number;
+        note: string | null;
+        // e.g. https://api.github.com/repos/DefinitelyTyped/DefinitelyTyped/issues/17902
+        content_url: string;
+    }
 }
