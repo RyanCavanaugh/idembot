@@ -2,12 +2,10 @@ import * as client from './client';
 
 import { IssueComment, IssueOrPullRequest, Project, ProjectColumn } from './github';
 
-export type Logger = {};
 export type OnChangeHandler = (item: IssueOrPullRequest) => void;
 
-export type ActionExecuteInfo = {
-    log: Logger
-};
+// TODO: Something useful here
+export type ActionExecuteInfo = {};
 
 export interface IAction {
     summary: string;

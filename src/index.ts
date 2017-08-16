@@ -1,14 +1,11 @@
 import * as Actions from './action';
 import * as client from './client';
-import * as logging from './logging';
 import { createCache } from './cache';
 import { runActions } from './actionRunner';
 import { SetupOptions, ParsedCommandLineOptions } from './options';
 import * as GitHubWrapper from './github';
 import { Issue, PullRequest, IssueOrPullRequest } from './github';
 export { User, Issue, PullRequest, Milestone, Label, IssueOrPullRequest, Project, ProjectCard, ProjectColumn } from './github';
-
-const log = logging.get('idembot').log;
 
 process.on('unhandledRejection', (err: any) => {
     console.error(err);
@@ -39,8 +36,8 @@ async function runRule(issue: IssueOrPullRequest, rule: (issue: any) => void, na
             await result;
         }
     } catch (e) {
-        log(`Rule ${name} encountered exception running on ${issue.html_url}`);
-        log(e);
+        console.error(`Rule ${name} encountered exception running on ${issue.html_url}`);
+        console.error(e);
     }
 }
 
@@ -50,9 +47,7 @@ export default function bot(setup: SetupOptions, opts: ParsedCommandLineOptions,
     GitHubWrapper.useCache(cache);
 
     async function runRules() {
-        const info: Actions.ActionExecuteInfo = {
-            log: {}
-        };
+        const info: Actions.ActionExecuteInfo = {};
 
         if (opts.kind === 'single') {
             const issueOrPR_raw = await client.fetchIssue(opts.single, opts.single.id);
