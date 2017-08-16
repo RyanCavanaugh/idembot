@@ -5,8 +5,6 @@ import createBot from './index';
 import { SetupOptions, ParsedCommandLineOptions, Query } from './options';
 import { parseQuery } from './query-parser';
 
-import { Issue } from './github';
-
 const oauth = process.env['AUTH_TOKEN'];
 
 async function parseQueryFile(filename: string): Promise<Query> {
@@ -34,7 +32,6 @@ async function main(argv: string[]) {
     const queries = (commander['query'] && commander['query'].split(',')) || [];
     console.log(queries);
     const dry = !!commander['dry'];
-    const short = !!commander['short'];
     const single = commander['single'] || '';
 
     const cacheRoot = path.join(path.dirname(path.resolve(filename)), 'cache');

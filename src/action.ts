@@ -1,11 +1,6 @@
 import * as client from './client';
-import { addAction } from './actionRunner';
 
-import {
-    Issue, IssueComment, IssueOrPullRequest, PullRequest,
-    User, Label, Milestone,
-    Project, ProjectColumn
-} from './github';
+import { IssueComment, IssueOrPullRequest, Project, ProjectColumn } from './github';
 
 export type Logger = {};
 export type OnChangeHandler = (item: IssueOrPullRequest) => void;
@@ -76,7 +71,7 @@ export namespace Labels {
             return `Add labels ${JSON.stringify(this.labels)} to issue ${this.issue.number}`;
         }
 
-        async execute(info: ActionExecuteInfo) {
+        async execute(_info: ActionExecuteInfo) {
             const labelsToAdd = this.labels.filter(lab => !this.issue.hasLabel(lab));
             if (labelsToAdd.length === 0) return;
             await this.fireOnBeforeChange();
@@ -90,7 +85,7 @@ export namespace Labels {
             return `Remove labels ${JSON.stringify(this.labels)} to issue ${this.issue.number}`;
         }
 
-        async execute(info: ActionExecuteInfo) {
+        async execute(_info: ActionExecuteInfo) {
             const labelsToRemove = this.labels.filter(lab => this.issue.hasLabel(lab));
             if (labelsToRemove.length === 0) return;
             await this.fireOnBeforeChange();
@@ -104,7 +99,7 @@ export namespace Labels {
             return `Apply label set ${JSON.stringify(this.labels)} to issue ${this.issue.number}`;
         }
 
-        async execute(info: ActionExecuteInfo) {
+        async execute(_info: ActionExecuteInfo) {
             const desired = this.labels.slice().sort();
             const actual = this.issue.labels.map(l => l.name).sort();
             if (JSON.stringify(desired) === JSON.stringify(actual)) {
@@ -162,7 +157,7 @@ export namespace Comments {
             return `Write comment (slug '${this.slug}') on issue ${this.issue.number}`;
         }
 
-        async execute(info: ActionExecuteInfo) {
+        async execute(_info: ActionExecuteInfo) {
             const me = await client.getMyLogin();
             // Find my comments, if it exists
             const comments = (await this.issue.getComments()).filter(c => c.user.login === me);
@@ -199,7 +194,7 @@ export namespace Assignees {
             return `Assign issue ${this.issue.fullName} to ${JSON.stringify(this.assignees)}`;
         }
 
-        async execute(info: ActionExecuteInfo) {
+        async execute(_info: ActionExecuteInfo) {
             throw new Error('Not implemented');
         }
     }
@@ -215,7 +210,7 @@ export namespace Issues {
             super(issue);
         }
 
-        async execute(info: ActionExecuteInfo) {
+        async execute(_info: ActionExecuteInfo) {
             await this.project.doSetIssueColumn(this.issue, this.column);
         }
     }
@@ -225,7 +220,7 @@ export namespace Issues {
             return `Lock issue ${this.issue.fullName}`;
         }
 
-        async execute(info: ActionExecuteInfo) {
+        async execute(_info: ActionExecuteInfo) {
             if (this.issue.locked) return;
             await this.fireOnBeforeChange();
             await client.lockIssue(this.issue);
@@ -238,7 +233,7 @@ export namespace Issues {
             return `Unlock issue ${this.issue.fullName}`;
         }
 
-        async execute(info: ActionExecuteInfo) {
+        async execute(_info: ActionExecuteInfo) {
             if (!this.issue.locked) return;
             await this.fireOnBeforeChange();
             await client.unlockIssue(this.issue);
@@ -251,7 +246,7 @@ export namespace Issues {
             return `Close issue ${this.issue.fullName}`;
         }
 
-        async execute(info: ActionExecuteInfo) {
+        async execute(_info: ActionExecuteInfo) {
             if (this.issue.state === 'open') {
                 await this.fireOnBeforeChange();
                 await client.closeIssue(this.issue);
@@ -265,7 +260,7 @@ export namespace Issues {
             return `Reopen issue ${this.issue.fullName}`;
         }
 
-        async execute(info: ActionExecuteInfo) {
+        async execute(_info: ActionExecuteInfo) {
             if (this.issue.state === 'closed') {
                 await this.fireOnBeforeChange();
                 await client.reopenIssue(this.issue);
