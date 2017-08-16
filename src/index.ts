@@ -1,17 +1,18 @@
-import * as Actions from './action';
-import * as client from './client';
-import { createCache } from './cache';
-import { runActions } from './actionRunner';
-import { SetupOptions, ParsedCommandLineOptions } from './options';
-import * as GitHubWrapper from './github';
-import { Issue, PullRequest, IssueOrPullRequest } from './github';
-export { User, Issue, PullRequest, Milestone, Label, IssueOrPullRequest, Project, ProjectCard, ProjectColumn } from './github';
+import * as Actions from "./action";
+import { runActions } from "./actionRunner";
+import { createCache } from "./cache";
+import * as client from "./client";
+import { Issue, IssueOrPullRequest, PullRequest, useCache } from "./github";
+import { ParsedCommandLineOptions, SetupOptions } from "./options";
+export {
+    User, Issue, PullRequest, Milestone, Label, IssueOrPullRequest, Project, ProjectCard, ProjectColumn,
+} from "./github";
 
-process.on('unhandledRejection', (err: any) => {
+process.on("unhandledRejection", (err: any) => {
     console.error(err);
 });
 
-async function runRulesOn(item: PullRequest | Issue, setup: SetupOptions) {
+async function runRulesOn(item: PullRequest | Issue, setup: SetupOptions): Promise<void> {
     if (setup.rules.issues && !item.isPullRequest) {
         for (const ruleName of Object.keys(setup.rules.issues)) {
             await runRule(item, setup.rules.issues[ruleName], ruleName);
@@ -29,7 +30,7 @@ async function runRulesOn(item: PullRequest | Issue, setup: SetupOptions) {
     }
 }
 
-async function runRule(issue: IssueOrPullRequest, rule: (issue: any) => void, name: string) {
+async function runRule(issue: IssueOrPullRequest, rule: (issue: any) => void, name: string): Promise<void> {
     try {
         const result = rule(issue);
         if (result !== undefined) {
@@ -41,19 +42,20 @@ async function runRule(issue: IssueOrPullRequest, rule: (issue: any) => void, na
     }
 }
 
-export default function bot(setup: SetupOptions, opts: ParsedCommandLineOptions, oauthToken: string) {
+export default function bot(setup: SetupOptions, opts: ParsedCommandLineOptions, oauthToken: string,
+    ): { runRules(): Promise<void> } {
     client.initialize(oauthToken);
     const cache = createCache(opts.cacheRoot);
-    GitHubWrapper.useCache(cache);
+    useCache(cache);
 
-    async function runRules() {
+    async function runRules(): Promise<void> {
         const info: Actions.ActionExecuteInfo = {};
 
-        if (opts.kind === 'single') {
-            const issueOrPR_raw = await client.fetchIssue(opts.single, opts.single.id);
-            const issue = Issue.fromIssueData(issueOrPR_raw);
-            let pr: PullRequest | undefined = undefined;
-            if (issueOrPR_raw.pull_request) {
+        if (opts.kind === "single") {
+            const issueOrPrRaw = await client.fetchIssue(opts.single, opts.single.id);
+            const issue = Issue.fromIssueData(issueOrPrRaw);
+            let pr: PullRequest | undefined;
+            if (issueOrPrRaw.pull_request) {
                 pr = await PullRequest.fromReference(opts.single, opts.single.id);
             }
 
@@ -75,25 +77,25 @@ export default function bot(setup: SetupOptions, opts: ParsedCommandLineOptions,
             }
 
             await runActions(info, opts);
-        } else if (opts.kind === 'queries') {
+        } else if (opts.kind === "queries") {
             for (const query of opts.queries) {
-                await client.runQuery(query, async item => {
+                await client.runQuery(query, async (item) => {
                     await runRulesOn(item, setup);
                 });
             }
 
             await runActions(info, opts);
         } else {
-            throw new Error('Unreachable?');
+            throw new Error("Unreachable?");
         }
     }
 
     return ({
-        runRules
+        runRules,
     });
 }
 
 export {
     Actions,
-    SetupOptions
+    SetupOptions,
 };

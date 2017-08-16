@@ -1,4 +1,4 @@
-import * as Wrapped from './github';
+import * as Wrapped from "./github";
 
 export type ParsedCommandLineOptions = BaseParsedCommandLineOptions & (QueriesOptions | SingleOptions);
 
@@ -19,7 +19,7 @@ export interface SingleOptions {
         owner: string;
         name: string;
         id: string;
-    }
+    };
 }
 
 export type Query = PRQuery | IssueQuery;
@@ -29,19 +29,18 @@ export interface BaseQuery {
 }
 
 export interface PRQuery extends BaseQuery {
-    kind :"prs";
+    kind: "prs";
     state: "open" | "closed" | "all";
-    count: number | "all";   
+    count: number | "all";
     sort: "created" | "updated" | "popularity" | "long-running";
-    direction: "asc" | "desc"; 
+    direction: "asc" | "desc";
 }
 
 export interface IssueQuery extends BaseQuery {
-    kind :"issues";
+    kind: "issues";
     state: "open" | "closed" | "all";
-    count: number | "all";    
+    count: number | "all";
 }
-
 
 export interface SetupOptions {
     rules: {
@@ -56,4 +55,3 @@ export interface SetupOptions {
         };
     };
 }
-

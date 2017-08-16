@@ -1,24 +1,24 @@
-import path = require('path');
-import commander = require('commander');
-import fs = require('fs-extra');
-import createBot from './index';
-import { SetupOptions, ParsedCommandLineOptions, Query } from './options';
-import { parseQuery } from './query-parser';
+import commander = require("commander");
+import fs = require("fs-extra");
+import path = require("path");
+import createBot from "./index";
+import { ParsedCommandLineOptions, Query, SetupOptions } from "./options";
+import { parseQuery } from "./query-parser";
 
-const oauth = process.env['AUTH_TOKEN'];
+const oauth = process.env.AUTH_TOKEN;
 
 async function parseQueryFile(filename: string): Promise<Query> {
-    return parseQuery(JSON.parse(await fs.readFile(filename, 'utf-8')));
+    return parseQuery(JSON.parse(await fs.readFile(filename, "utf-8")));
 }
 
-async function main(argv: string[]) {
+async function main(argv: string[]): Promise<number> {
     commander
-        .option('-f, --file [filename]', "specify rules filename (default: rules.js)", "rules.js")
-        .option('-d, --dry', "don't actually change anything", false)
-        .option('-r, --rules [rules]', "specify a comma-delimited list of specific rules to run")
-        .option('--ls', "displays a list of rule names and exits")
-        .option('-q, --query [query]', "specify query filenames (comma-delimited, default: query.json)")
-        .option('--single [ref]', "run on the specified issue or PR. Ref: owner/repo#id")
+        .option("-f, --file [filename]", "specify rules filename (default: rules.js)", "rules.js")
+        .option("-d, --dry", "don't actually change anything", false)
+        .option("-r, --rules [rules]", "specify a comma-delimited list of specific rules to run")
+        .option("--ls", "displays a list of rule names and exits")
+        .option("-q, --query [query]", "specify query filenames (comma-delimited, default: query.json)")
+        .option("--single [ref]", "run on the specified issue or PR. Ref: owner/repo#id")
         .parse(process.argv);
 
     commander.usage("idembot --query open-issues.json");
@@ -28,13 +28,13 @@ async function main(argv: string[]) {
         return 0;
     }
 
-    const filename = commander['file'];
-    const queries = (commander['query'] && commander['query'].split(',')) || [];
+    const filename = commander.file;
+    const queries = (commander.query && commander.query.split(",")) || [];
     console.log(queries);
-    const dry = !!commander['dry'];
-    const single = commander['single'] || '';
+    const dry = !!commander.dry;
+    const single = commander.single || "";
 
-    const cacheRoot = path.join(path.dirname(path.resolve(filename)), 'cache');
+    const cacheRoot = path.join(path.dirname(path.resolve(filename)), "cache");
 
     // Load the rules module
     let rulesMod: SetupOptions;
@@ -46,7 +46,7 @@ async function main(argv: string[]) {
     }
 
     // Handle --ls mode and exit
-    if (commander['ls']) {
+    if (commander.ls) {
         console.log(`Rules in module ${filename}:`);
         for (const rule of Object.keys(rulesMod.rules)) {
             console.log(` * ${rule}`);
@@ -54,7 +54,7 @@ async function main(argv: string[]) {
         return 0;
     }
 
-    const ruleNames = commander['rules'] || Object.keys(rulesMod.rules);
+    const ruleNames = commander.rules || Object.keys(rulesMod.rules);
 
     // Parse queries
     let parsedOptions: ParsedCommandLineOptions;
@@ -65,20 +65,20 @@ async function main(argv: string[]) {
         }
         const match = /(\w+)\/(\w+)#(\w+)/.exec(single);
         if (!match) {
-            console.log('Specify single in format: owner/name#id');
+            console.log("Specify single in format: owner/name#id");
             return -1;
         }
-        const owner = match[1], name = match[2], id = match[3];
+        const [owner, name, id] = match.slice(1);
         parsedOptions = {
             cacheRoot, dry, ruleNames,
             kind: "single",
-            single: { owner, name, id }
+            single: { owner, name, id },
         };
     } else {
         const parsedQueries: Query[] = [];
-        if (queries.length === 0) queries.push('query.json');
+        if (queries.length === 0) queries.push("query.json");
 
-        for (const q of queries || ['query.json']) {
+        for (const q of queries || ["query.json"]) {
             try {
                 parsedQueries.push(await parseQueryFile(q));
             } catch (e) {
@@ -90,13 +90,13 @@ async function main(argv: string[]) {
         parsedOptions = {
             cacheRoot, dry, ruleNames,
             kind: "queries",
-            queries: parsedQueries
+            queries: parsedQueries,
         };
     }
 
     // Check for oauth token
     if (oauth === undefined) {
-        console.log('You must set the AUTH_TOKEN environment variable to a suitable OAuth token');
+        console.log("You must set the AUTH_TOKEN environment variable to a suitable OAuth token");
         return -1;
     }
 
@@ -106,4 +106,4 @@ async function main(argv: string[]) {
     return 0;
 }
 
-main(process.argv).then(r => process.exit(r));
+main(process.argv).then((r) => process.exit(r));
