@@ -1,6 +1,6 @@
 import path = require('path');
 import commander = require('commander');
-import fs = require('mz/fs');
+import fs = require('fs-extra');
 import createBot from './index';
 import { SetupOptions, ParsedCommandLineOptions, Query } from './options';
 import { parseQuery } from './query-parser';
