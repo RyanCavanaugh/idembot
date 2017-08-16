@@ -1,12 +1,13 @@
 import https = require('https');
 
 import { Issue, PullRequest, parseBasicRepoReference } from './github';
+import * as api from './github-api';
 import { Query } from './options';
 import * as Wrapped from './github';
 import path from './build-path';
 
 export type IssuePageFetchResult = {
-    issues: GitHubAPI.Issue[];
+    issues: api.Issue[];
     fetchMore?: () => Promise<IssuePageFetchResult>;
 }
 
@@ -19,7 +20,7 @@ export function initialize(_oauthToken: string) {
 let me: string | undefined;
 export async function getMyLogin(): Promise<string> {
     if (me === undefined) {
-        me = (JSON.parse(await exec('GET', '/user')) as GitHubAPI.User).login;
+        me = (JSON.parse(await exec('GET', '/user')) as api.User).login;
     }
     return me;
 }
@@ -98,11 +99,11 @@ export async function editComment(comment: Wrapped.IssueComment, body: string) {
 }
 
 export type IssuePageResult = {
-    page: GitHubAPI.Issue[];
+    page: api.Issue[];
     next?(): Promise<IssuePageResult>;
 };
 
-export async function fetchAllIssuesAndPRsRaw(repo: GitHubAPI.RepoReference) {
+export async function fetchAllIssuesAndPRsRaw(repo: api.RepoReference) {
     return fetchPage(1);
     async function fetchPage(page: number): Promise<IssuePageResult> {
         // https://developer.github.com/v3/issues/#list-issues
@@ -114,7 +115,7 @@ export async function fetchAllIssuesAndPRsRaw(repo: GitHubAPI.RepoReference) {
             page
         };
 
-        const thisPage: GitHubAPI.Issue[] = JSON.parse(await exec('GET',
+        const thisPage: api.Issue[] = JSON.parse(await exec('GET',
             path('repos', repo.owner, repo.name, 'issues'),
             { queryString }));
 
@@ -125,7 +126,7 @@ export async function fetchAllIssuesAndPRsRaw(repo: GitHubAPI.RepoReference) {
     }
 }
 
-export async function fetchChangedIssuesRaw(repo: GitHubAPI.RepoReference) {
+export async function fetchChangedIssuesRaw(repo: api.RepoReference) {
     // https://developer.github.com/v3/issues/#list-issues
     const queryString: any = {
         sort: 'updated',
@@ -134,7 +135,7 @@ export async function fetchChangedIssuesRaw(repo: GitHubAPI.RepoReference) {
         per_page: 100
     };
 
-    let page: GitHubAPI.Issue[] = JSON.parse(await exec('GET',
+    let page: api.Issue[] = JSON.parse(await exec('GET',
         path('repos', repo.owner, repo.name, 'issues'),
         { queryString }));
     page = page.filter(i => !i.pull_request);
@@ -157,7 +158,7 @@ export async function runQuery(q: Query, callback: (item: PullRequest | Issue) =
             };
 
             const ref = parseBasicRepoReference(q.repo);
-            const page: GitHubAPI.PullRequestFromList[] = JSON.parse(await exec('GET',
+            const page: api.PullRequestFromList[] = JSON.parse(await exec('GET',
                 path('repos', ref.owner, ref.name, 'pulls'),
                 { queryString }));
             for (const item of page) {
@@ -176,7 +177,7 @@ export async function runQuery(q: Query, callback: (item: PullRequest | Issue) =
 }
 
 
-export async function fetchChangedPRsRaw(repo: GitHubAPI.RepoReference): Promise<GitHubAPI.PullRequestFromList[]> {
+export async function fetchChangedPRsRaw(repo: api.RepoReference): Promise<api.PullRequestFromList[]> {
     // https://developer.github.com/v3/pulls/#list-pull-requests
     const queryString: any = {
         sort: 'updated',
@@ -185,7 +186,7 @@ export async function fetchChangedPRsRaw(repo: GitHubAPI.RepoReference): Promise
         per_page: 100
     };
 
-    const page: GitHubAPI.PullRequestFromList[] = JSON.parse(await exec('GET',
+    const page: api.PullRequestFromList[] = JSON.parse(await exec('GET',
         path('repos', repo.owner, repo.name, 'pulls'),
         { queryString }));
     return page;
@@ -193,14 +194,14 @@ export async function fetchChangedPRsRaw(repo: GitHubAPI.RepoReference): Promise
 
 const ProjectsPreview = "application/vnd.github.inertia-preview+json"
 
-export async function fetchProjectColumns(projectId: number): Promise<GitHubAPI.ProjectColumn[]> {
+export async function fetchProjectColumns(projectId: number): Promise<api.ProjectColumn[]> {
     const raw = await exec('GET', path('projects', projectId, 'columns'), { preview: ProjectsPreview });
-    return JSON.parse(raw) as GitHubAPI.ProjectColumn[];
+    return JSON.parse(raw) as api.ProjectColumn[];
 }
 
-export async function fetchProjectColumnCards(columnId: number): Promise<GitHubAPI.ProjectColumnCard[]> {
+export async function fetchProjectColumnCards(columnId: number): Promise<api.ProjectColumnCard[]> {
     const raw = await exec('GET', path('projects', 'columns', columnId, 'cards'), { preview: ProjectsPreview });
-    return JSON.parse(raw) as GitHubAPI.ProjectColumnCard[];
+    return JSON.parse(raw) as api.ProjectColumnCard[];
 }
 
 export async function createProjectCard(columnId: number, issue: Wrapped.IssueOrPullRequest): Promise<void> {
@@ -234,22 +235,22 @@ export async function deleteProjectCard(card: Wrapped.ProjectCard): Promise<void
 }
 
 
-export async function fetchIssueComments(issue: Wrapped.Issue): Promise<GitHubAPI.IssueComment[]> {
+export async function fetchIssueComments(issue: Wrapped.Issue): Promise<api.IssueComment[]> {
     const raw = await execPaged(path('repos', issue.repository.owner, issue.repository.name, 'issues', issue.number, 'comments'));
-    return raw as GitHubAPI.IssueComment[];
+    return raw as api.IssueComment[];
 }
 
-export async function fetchPRCommits(issue: Wrapped.PullRequest): Promise<GitHubAPI.PullRequestCommit[]> {
+export async function fetchPRCommits(issue: Wrapped.PullRequest): Promise<api.PullRequestCommit[]> {
     const raw = await execPaged(path('repos', issue.repository.owner, issue.repository.name, 'pulls', issue.number, 'commits'));
-    return raw as GitHubAPI.PullRequestCommit[];
+    return raw as api.PullRequestCommit[];
 }
 
-export async function fetchPRFiles(issue: Wrapped.PullRequest): Promise<GitHubAPI.PullRequestFile[]> {
+export async function fetchPRFiles(issue: Wrapped.PullRequest): Promise<api.PullRequestFile[]> {
     const raw = await execPaged(path('repos', issue.repository.owner, issue.repository.name, 'pulls', issue.number, 'files'));
-    return raw as GitHubAPI.PullRequestFile[];
+    return raw as api.PullRequestFile[];
 }
 
-export async function fetchIssueCommentReactions(repo: GitHubAPI.RepoReference, commentId: number): Promise<GitHubAPI.Reaction[]> {
+export async function fetchIssueCommentReactions(repo: api.RepoReference, commentId: number): Promise<api.Reaction[]> {
     // https://developer.github.com/v3/reactions/#list-reactions-for-an-issue-comment
     // GET /repos/:owner/:repo/issues/comments/:id/reactions
     const result = JSON.parse(await exec('GET', path('repos', repo.owner, repo.name, 'issues', 'comments', commentId, 'reactions')));
@@ -257,28 +258,28 @@ export async function fetchIssueCommentReactions(repo: GitHubAPI.RepoReference, 
     return result;
 }
 
-export async function fetchPR(repo: GitHubAPI.RepoReference, number: number | string): Promise<GitHubAPI.PullRequest> {
+export async function fetchPR(repo: api.RepoReference, number: number | string): Promise<api.PullRequest> {
     const result = JSON.parse(await exec('GET', path('repos', repo.owner, repo.name, 'pulls', number)));
     return result;
 }
 
-export async function fetchIssue(repo: GitHubAPI.RepoReference, number: number | string): Promise<GitHubAPI.Issue> {
+export async function fetchIssue(repo: api.RepoReference, number: number | string): Promise<api.Issue> {
     const result = JSON.parse(await exec('GET', path('repos', repo.owner, repo.name, 'issues', number)));
     return result;
 }
 
-export async function fetchPRReviews(repo: GitHubAPI.RepoReference, number: number): Promise<GitHubAPI.PullRequestReview[]> {
+export async function fetchPRReviews(repo: api.RepoReference, number: number): Promise<api.PullRequestReview[]> {
     // https://developer.github.com/v3/pulls/reviews/#list-reviews-on-a-pull-request
     // GET /repos/:owner/:repo/pulls/:number/reviews
     const result = JSON.parse(await exec('GET', path('repos', repo.owner, repo.name, 'pulls', number, 'reviews'), { preview: "application/vnd.github.black-cat-preview+json" }));
-    return result as GitHubAPI.PullRequestReview[];
+    return result as api.PullRequestReview[];
 }
 
-export async function fetchRefStatusSummary(repo: GitHubAPI.RepoReference, ref: string): Promise<GitHubAPI.CombinedStatus> {
+export async function fetchRefStatusSummary(repo: api.RepoReference, ref: string): Promise<api.CombinedStatus> {
     // https://developer.github.com/v3/repos/statuses/#get-the-combined-status-for-a-specific-ref
     // GET /repos/:owner/:repo/commits/:ref/status
     const result = JSON.parse(await exec('GET', path('repos', repo.owner, repo.name, 'commits', ref, 'status')));
-    return result as GitHubAPI.CombinedStatus;
+    return result as api.CombinedStatus;
 }
 
 async function execPaged(path: string, perPage: number = 100, queryString: { [key: string]: string } = {}): Promise<{}[]> {
