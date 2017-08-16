@@ -1,4 +1,4 @@
-import fs = require('mz/fs');
+import fs = require('fs-extra');
 import path = require('path');
 
 export interface CacheSaveEntry<T> {
@@ -24,14 +24,14 @@ export function createCache(cacheRoot: string): Cache {
 
     async function save(content: any, key: string, timestamp: Date) {
         const filePath = getFilename(key);
-        await mkdirp(path.dirname(filePath));
+        await fs.mkdirp(path.dirname(filePath));
         const withTime: CacheSaveEntry<any> = { timestamp: timestamp.toUTCString(), content };
-        await fs.writeFile(filePath, JSON.stringify(withTime), 'utf8');
+        await fs.writeFile(filePath, JSON.stringify(withTime), { encoding: 'utf8' });
     }
 
     async function load(key: string): Promise<CacheLoadResult<any>> {
         const path = getFilename(key);
-        if (await fs.exists(path)) {
+        if (await fs.pathExists(path)) {
             const result: CacheLoadResult<any> = JSON.parse(await fs.readFile(path, 'utf8'));
             result.exists = true;
             return result;
@@ -46,19 +46,4 @@ export function createCache(cacheRoot: string): Cache {
         save,
         load
     };
-}
-
-async function mkdirp(pathToMake: string) {
-    let start = pathToMake;
-    const pathsToMake: string[] = [];
-    // Trim until we find something which does exist
-    while (true) {
-        const exists = await fs.exists(start);
-        if (exists) break;
-        pathsToMake.push(start);
-        start = path.dirname(start);
-    }
-    while (pathsToMake.length) {
-        await fs.mkdir(pathsToMake.pop()!);
-    }
 }

@@ -25,13 +25,11 @@
   "homepage": "https://github.com/RyanCavanaugh/idembot#readme",
   "dependencies": {
     "@types/commander": "^2.9.1",
-    "@types/mkdirp": "^0.5.0",
-    "@types/mz": "^0.0.31",
+    "@types/fs-extra": "^4.0.0",
     "@types/node": "^8.0.22",
     "commander": "^2.11.0",
-    "mkdirp": "^0.5.1",
+    "fs-extra": "^4.0.1",
     "moment": "^2.18.1",
-    "mz": "^2.6.0",
     "sleep-promise": "^2.0.0"
   }
 }
