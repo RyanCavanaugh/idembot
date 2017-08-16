@@ -3,13 +3,11 @@
 import * as Actions from './action';
 import * as client from './client';
 import * as logging from './logging';
-import syncRepoCache from './cache-manager';
 import { createCache } from './cache';
 import { runActions } from './actionRunner';
 import { SetupOptions, ParsedCommandLineOptions } from './options';
-import { Query, PRQuery, IssueQuery } from './options';
 import * as GitHubWrapper from './github';
-import { User, Issue, PullRequest, Milestone, Label, IssueOrPullRequest } from './github';
+import { Issue, PullRequest, IssueOrPullRequest } from './github';
 export { User, Issue, PullRequest, Milestone, Label, IssueOrPullRequest, Project, ProjectCard, ProjectColumn } from './github';
 
 const log = logging.get('idembot').log;

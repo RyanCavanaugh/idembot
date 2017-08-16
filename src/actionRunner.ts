@@ -1,5 +1,5 @@
 import { IAction, IActionImplementation, ActionExecuteInfo } from './action';
-import { SetupOptions, ParsedCommandLineOptions } from './options';
+import { ParsedCommandLineOptions } from './options';
 
 export function addAction(action: IAction) {
     currentActionList.push(action);

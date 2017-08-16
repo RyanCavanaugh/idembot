@@ -65,7 +65,7 @@ export class User {
         return User.getCacheKey(this.login);
     }
 
-    private constructor(private originalData: GitHubAPI.User) {
+    private constructor(originalData: GitHubAPI.User) {
         this.update(originalData);
     }
     public update(data: GitHubAPI.User) {
@@ -158,7 +158,7 @@ export class Milestone {
     /** When this milestone was closed, if applicable */
     readonly closed_at: moment.Moment | null;
 
-    constructor(private originalData: GitHubAPI.Milestone) {
+    constructor(originalData: GitHubAPI.Milestone) {
         Object.assign(this, {
             id: originalData.id,
             number: originalData.number,
@@ -261,7 +261,7 @@ export abstract class IssueOrPullRequest {
 
     readonly repository: Repository;
 
-    protected constructor(private originalData: GitHubAPI.Issue) {
+    protected constructor(originalData: GitHubAPI.Issue) {
         // Copy some fields
         Object.assign(this, {
             number: originalData.number,
@@ -383,7 +383,7 @@ export abstract class IssueOrPullRequest {
 }
 
 export class Issue extends IssueOrPullRequest {
-    static fromData(data: GitHubAPI.Issue): never {
+    static fromData(_data: GitHubAPI.Issue): never {
         throw new Error("Don't call me");
     }
 
@@ -404,7 +404,7 @@ export class PullRequest extends IssueOrPullRequest {
         return new PullRequest(await client.fetchPR(repo, number), await client.fetchIssue(repo, number));
     }
 
-    static fromData(data: GitHubAPI.Issue): never {
+    static fromData(_data: GitHubAPI.Issue): never {
         throw new Error("Don't call me");
     }
 
@@ -614,22 +614,18 @@ interface PoolSettings<KeyType, DataType, InstanceType> {
     keyToCacheKey?(key: KeyType): string;
 }
 
-interface Pool<InstanceType, DataType, KeyType> {
-    fromKey(key: KeyType): Promise<InstanceType>;
-}
-
 function createPool<InstanceType extends { update(d: DataType): void }, DataType, KeyType>(settings: PoolSettings<KeyType, DataType, InstanceType>) {
     const pool = new WeakStringMap<InstanceType>();
-    settings.keyToString = settings.keyToString || ((k: any) => k);
-    settings.keyToCacheKey = settings.keyToCacheKey || ((k: any) => k);
+    const keyToString = settings.keyToString || ((k: any) => k);
+    const keyToCacheKey = settings.keyToCacheKey || ((k: any) => k);
 
     return ({
         fromKey: async function (key: KeyType) {
-            const keyString = settings.keyToString!(key);
+            const keyString = keyToString(key);
             const extant = pool.get(keyString);
             if (extant) return extant;
 
-            const cacheKey = settings.keyToCacheKey!(key);
+            const cacheKey = keyToCacheKey(key);
             const cached = cache && await cache.load(cacheKey);
             if (cached && cached.exists) {
                 return settings.construct(cached.content);
@@ -641,7 +637,7 @@ function createPool<InstanceType extends { update(d: DataType): void }, DataType
             return settings.construct(data);
         },
         fromData: function (data: DataType) {
-            const keyString = settings.keyToString!(settings.keyFromData(data));
+            const keyString = keyToString(settings.keyFromData(data));
             const extant = pool.get(keyString);
             if (extant) {
                 extant.update(data);

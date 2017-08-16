@@ -1,10 +1,8 @@
 import https = require('https');
-import http = require('http');
 
-import { Issue, PullRequest, IssueOrPullRequest, parseBasicRepoReference } from './github';
-import { Query, PRQuery, IssueQuery } from './options';
+import { Issue, PullRequest, parseBasicRepoReference } from './github';
+import { Query } from './options';
 import * as Wrapped from './github';
-import WeakStringMap from './weak-string-map';
 import path from './build-path';
 
 export type IssuePageFetchResult = {
@@ -108,7 +106,6 @@ export async function fetchAllIssuesAndPRsRaw(repo: GitHubAPI.RepoReference) {
     return fetchPage(1);
     async function fetchPage(page: number): Promise<IssuePageResult> {
         // https://developer.github.com/v3/issues/#list-issues
-        const timestamp = new Date();
         const queryString: any = {
             sort: 'created',
             filter: 'all',
