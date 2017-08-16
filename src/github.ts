@@ -1,6 +1,7 @@
 import sleep = require('sleep-promise');
 
 import * as client from './client';
+import * as api from './github-api'
 import WeakStringMap from './weak-string-map';
 import { addAction } from './actionRunner';
 import moment = require('moment');
@@ -41,7 +42,7 @@ export function parseRepoReferenceFromURL(url: string) {
 }
 
 export class User {
-    private static pool = createPool<User, GitHubAPI.User, string>({
+    private static pool = createPool<User, api.User, string>({
         fetchData: async (login) => {
             return JSON.parse(await client.exec('GET', path('users', login)))
         },
@@ -51,7 +52,7 @@ export class User {
     static async fromLogin(login: string): Promise<User> {
         return await User.pool.fromKey(login);
     }
-    static fromData(data: GitHubAPI.User): User {
+    static fromData(data: api.User): User {
         return User.pool.fromData(data);
     }
 
@@ -65,10 +66,10 @@ export class User {
         return User.getCacheKey(this.login);
     }
 
-    private constructor(originalData: GitHubAPI.User) {
+    private constructor(originalData: api.User) {
         this.update(originalData);
     }
-    public update(data: GitHubAPI.User) {
+    public update(data: api.User) {
         Object.assign(this, {
             login: data.login
         });
@@ -76,7 +77,7 @@ export class User {
 }
 
 export class Label {
-    private static pool = createPool<Label, [GitHubAPI.RepoReference, GitHubAPI.Label], [GitHubAPI.RepoReference, string]>({
+    private static pool = createPool<Label, [api.RepoReference, api.Label], [api.RepoReference, string]>({
         fetchData: async (key) => {
             return JSON.parse(await client.exec('GET', path('repos', key[0].owner, key[0].name, 'labels', key[1])));
         },
@@ -84,17 +85,17 @@ export class Label {
         keyFromData: data => [data[0], data[1].name]
     });
 
-    static fromData(repo: GitHubAPI.RepoReference, data: GitHubAPI.Label) {
+    static fromData(repo: api.RepoReference, data: api.Label) {
         return Label.pool.fromData([repo, data]);
     }
 
     readonly name: string;
     readonly color: string;
-    private constructor(public repo: GitHubAPI.RepoReference, data: GitHubAPI.Label) {
+    private constructor(public repo: api.RepoReference, data: api.Label) {
         this.update([repo, data]);
     }
 
-    update(data: [GitHubAPI.RepoReference, GitHubAPI.Label]) {
+    update(data: [api.RepoReference, api.Label]) {
         Object.assign(this, { name: data[1].name, color: data[1].color });
     }
 }
@@ -107,15 +108,15 @@ export class IssueComment {
     readonly body: string;
     readonly repository: Repository;
 
-    static fromData(originalData: GitHubAPI.IssueComment, issue: Issue) {
+    static fromData(originalData: api.IssueComment, issue: Issue) {
         return new IssueComment(originalData, issue);
     }
 
-    private constructor(private originalData: GitHubAPI.IssueComment, public issue: Issue) {
+    private constructor(private originalData: api.IssueComment, public issue: Issue) {
         this.update(originalData);
     }
 
-    update(data: GitHubAPI.IssueComment) {
+    update(data: api.IssueComment) {
         Object.assign(this, {
             id: data.id,
             user: User.fromData(data.user),
@@ -126,7 +127,7 @@ export class IssueComment {
         });
     }
 
-    async getReactions(): Promise<GitHubAPI.Reaction[]> {
+    async getReactions(): Promise<api.Reaction[]> {
         // GET /repos/:owner/:repo/issues/comments/:id/reactions
         const reactions = await client.fetchIssueCommentReactions(parseRepoReferenceFromURL(this.originalData.url), this.id);
         return reactions;
@@ -158,7 +159,7 @@ export class Milestone {
     /** When this milestone was closed, if applicable */
     readonly closed_at: moment.Moment | null;
 
-    constructor(originalData: GitHubAPI.Milestone) {
+    constructor(originalData: api.Milestone) {
         Object.assign(this, {
             id: originalData.id,
             number: originalData.number,
@@ -190,7 +191,7 @@ export class Repository {
         return result;
     }
 
-    public get reference(): GitHubAPI.RepoReference {
+    public get reference(): api.RepoReference {
         return { name: this.name, owner: this.name };
     }
 
@@ -199,7 +200,7 @@ export class Repository {
 }
 
 export abstract class IssueOrPullRequest {
-    static async fromData(data: GitHubAPI.Issue): Promise<Issue | PullRequest> {
+    static async fromData(data: api.Issue): Promise<Issue | PullRequest> {
         if (data.pull_request) {
             return await PullRequest.fromReference(parseRepoReferenceFromURL(data.url), data.number);
         } else {
@@ -207,15 +208,15 @@ export abstract class IssueOrPullRequest {
         }
     }
 
-    static getCacheKey(repo: GitHubAPI.RepoReference, number: number, isPR: boolean) {
+    static getCacheKey(repo: api.RepoReference, number: number, isPR: boolean) {
         return IssueOrPullRequest.getCacheKeyBasePath(repo, number, isPR) + '.json';
     }
 
-    static getCommentsCacheKey(repo: GitHubAPI.RepoReference, number: number, isPR: boolean) {
+    static getCommentsCacheKey(repo: api.RepoReference, number: number, isPR: boolean) {
         return IssueOrPullRequest.getCacheKeyBasePath(repo, number, isPR) + '.comments.json';
     }
 
-    static getCacheKeyBasePath(repo: GitHubAPI.RepoReference, number: number, isPR: boolean) {
+    static getCacheKeyBasePath(repo: api.RepoReference, number: number, isPR: boolean) {
         const kind = isPR ? "pull_requests" : "issues";
         // 0000, 1000, 2000, etc
         const thousands = `${Math.floor(number / 1000)}000`;
@@ -261,7 +262,7 @@ export abstract class IssueOrPullRequest {
 
     readonly repository: Repository;
 
-    protected constructor(originalData: GitHubAPI.Issue) {
+    protected constructor(originalData: api.Issue) {
         // Copy some fields
         Object.assign(this, {
             number: originalData.number,
@@ -383,37 +384,37 @@ export abstract class IssueOrPullRequest {
 }
 
 export class Issue extends IssueOrPullRequest {
-    static fromData(_data: GitHubAPI.Issue): never {
+    static fromData(_data: api.Issue): never {
         throw new Error("Don't call me");
     }
 
-    static fromIssueData(data: GitHubAPI.Issue) {
+    static fromIssueData(data: api.Issue) {
         return new Issue(data);
     }
 
     readonly isPullRequest: boolean = false;
 
-    private constructor(data: GitHubAPI.Issue) {
+    private constructor(data: api.Issue) {
         super(data);
     }
 }
 
 export type StatusSummary = "pass" | "fail" | "pending";
 export class PullRequest extends IssueOrPullRequest {
-    static async fromReference(repo: GitHubAPI.RepoReference, number: number | string): Promise<PullRequest> {
+    static async fromReference(repo: api.RepoReference, number: number | string): Promise<PullRequest> {
         return new PullRequest(await client.fetchPR(repo, number), await client.fetchIssue(repo, number));
     }
 
-    static fromData(_data: GitHubAPI.Issue): never {
+    static fromData(_data: api.Issue): never {
         throw new Error("Don't call me");
     }
 
-    static getPRCacheKey(repo: GitHubAPI.RepoReference, number: number, isPR: boolean) {
+    static getPRCacheKey(repo: api.RepoReference, number: number, isPR: boolean) {
         return IssueOrPullRequest.getCacheKeyBasePath(repo, number, isPR) + 'pr.json';
     }
 
     // TODO interning
-    static async fromIssueAndPRData(prData: GitHubAPI.PullRequest, issueData: GitHubAPI.Issue): Promise<PullRequest> {
+    static async fromIssueAndPRData(prData: api.PullRequest, issueData: api.Issue): Promise<PullRequest> {
         const issueKey = this.getCacheKey(parseRepoReferenceFromURL(prData.url), prData.number, true);
         const prKey = this.getPRCacheKey(parseRepoReferenceFromURL(prData.url), prData.number, true);
 
@@ -421,8 +422,8 @@ export class PullRequest extends IssueOrPullRequest {
             const prCached = await cache.load(prKey);
             const issueCached = await cache.load(issueKey);
             if (prCached.exists && issueCached.exists) {
-                const cachedPR = prCached.content as GitHubAPI.PullRequest;
-                const cachedIssue = issueCached.content as GitHubAPI.Issue;
+                const cachedPR = prCached.content as api.PullRequest;
+                const cachedIssue = issueCached.content as api.Issue;
                 if (cachedPR.updated_at === prData.updated_at) {
                     return PullRequest.fromPullRequestData(cachedPR, cachedIssue);
                 }
@@ -433,15 +434,15 @@ export class PullRequest extends IssueOrPullRequest {
     }
 
     // TODO interning
-    static fromPullRequestData(prData: GitHubAPI.PullRequest, issueData: GitHubAPI.Issue) {
+    static fromPullRequestData(prData: api.PullRequest, issueData: api.Issue) {
         return new PullRequest(prData, issueData);
     }
 
-    head: GitHubAPI.Commit;
+    head: api.Commit;
     merge_commit_sha: string;
     merged: boolean;
     mergeable: boolean | null;
-    mergeable_state: GitHubAPI.MergeableState;
+    mergeable_state: api.MergeableState;
 
     comments: number;
     commits: number;
@@ -451,7 +452,7 @@ export class PullRequest extends IssueOrPullRequest {
 
     readonly isPullRequest: boolean = true;
 
-    private constructor(prData: GitHubAPI.PullRequest, issueData: GitHubAPI.Issue) {
+    private constructor(prData: api.PullRequest, issueData: api.Issue) {
         super(issueData);
 
         Object.assign(this, {
@@ -468,25 +469,25 @@ export class PullRequest extends IssueOrPullRequest {
         });
     }
 
-    public async getStatusSummary(): Promise<GitHubAPI.StatusSummary> {
+    public async getStatusSummary(): Promise<api.StatusSummary> {
         // GET /repos/:owner/:repo/commits/:ref/status
         return (await client.fetchRefStatusSummary(this.repository.reference, this.head.sha)).state;
     }
 
-    public async getStatus(): Promise<GitHubAPI.CombinedStatus> {
+    public async getStatus(): Promise<api.CombinedStatus> {
         // GET /repos/:owner/:repo/commits/:ref/status
         return (await client.fetchRefStatusSummary(this.repository.reference, this.head.sha));
     }
 
-    public async getReviews(): Promise<GitHubAPI.PullRequestReview[]> {
+    public async getReviews(): Promise<api.PullRequestReview[]> {
         return await client.fetchPRReviews(this.repository.reference, this.number);
     }
 
-    public async getCommitsRaw(): Promise<GitHubAPI.PullRequestCommit[]> {
+    public async getCommitsRaw(): Promise<api.PullRequestCommit[]> {
         return await client.fetchPRCommits(this);
     }
 
-    public async getFilesRaw(): Promise<GitHubAPI.PullRequestFile[]> {
+    public async getFilesRaw(): Promise<api.PullRequestFile[]> {
         return await client.fetchPRFiles(this);
     }
 
@@ -570,7 +571,7 @@ export class ProjectColumn {
 
     public cards: ProjectCard[];
 
-    private constructor(public columnId: number, public name: string, cards: GitHubAPI.ProjectColumnCard[]) {
+    private constructor(public columnId: number, public name: string, cards: api.ProjectColumnCard[]) {
         this.cards = cards.map(c => new ProjectCard(c));
     }
 
@@ -586,7 +587,7 @@ export class ProjectColumn {
 
 export class ProjectCard {
     public id: number;
-    constructor(private data: GitHubAPI.ProjectColumnCard) {
+    constructor(private data: api.ProjectColumnCard) {
         this.id = data.id;
     }
 

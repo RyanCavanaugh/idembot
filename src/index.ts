@@ -1,5 +1,3 @@
-/// <reference path="github-api.ts" />
-
 import * as Actions from './action';
 import * as client from './client';
 import * as logging from './logging';
