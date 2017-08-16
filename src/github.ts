@@ -1,20 +1,19 @@
-import sleep = require('sleep-promise');
+import moment = require("moment");
+import sleep = require("sleep-promise");
 
-import * as client from './client';
-import * as api from './github-api'
-import WeakStringMap from './weak-string-map';
-import { addAction } from './actionRunner';
-import moment = require('moment');
-import { Cache } from './cache';
+import { IAction, Labels, Comments, Issues } from "./action";
+import { addAction } from "./actionRunner";
+import path from "./build-path";
+import { Cache } from "./cache";
+import * as client from "./client";
+import * as api from "./github-api";
+import WeakStringMap from "./weak-string-map";
 
-import * as Actions from './action';
-import path from './build-path';
-
-export function useCache(c: Cache) {
+export function useCache(c: Cache): void {
     cache = c;
 }
 
-let cache: Cache | undefined = undefined;
+let cache: Cache | undefined;
 
 function parseDate(s: string): moment.Moment;
 function parseDate(s: string | null): moment.Moment | null;
@@ -23,7 +22,7 @@ function parseDate(s: string | null): moment.Moment | null {
     return moment(new Date(s));
 }
 
-export function parseBasicRepoReference(ownerSlashName: string) {
+export function parseBasicRepoReference(ownerSlashName: string): Repository {
     const m = /(\w+)\/(\w+)/.exec(ownerSlashName);
     if (!m) {
         throw new Error(`Expected "${ownerSlashName}" to be in format "owner/name"`);
@@ -31,7 +30,7 @@ export function parseBasicRepoReference(ownerSlashName: string) {
     return Repository.create(m[1], m[2]);
 }
 
-export function parseRepoReferenceFromURL(url: string) {
+export function parseRepoReferenceFromURL(url: string): Repository {
     // https://api.github.com/repos/octocat/Hello-World/something
     const regex = /^https:\/\/[^\/]+\/repos\/([^\/]+)\/([^\/]+)/;
     const match = regex.exec(url);
@@ -44,34 +43,35 @@ export function parseRepoReferenceFromURL(url: string) {
 export class User {
     private static pool = createPool<User, api.User, string>({
         fetchData: async (login) => {
-            return JSON.parse(await client.exec('GET', path('users', login)))
+            return JSON.parse(await client.exec("GET", path("users", login)));
         },
-        construct: data => new User(data),
-        keyFromData: data => data.login
+        construct: (data) => new User(data),
+        keyFromData: (data) => data.login,
     });
     static async fromLogin(login: string): Promise<User> {
         return await User.pool.fromKey(login);
     }
+
     static fromData(data: api.User): User {
         return User.pool.fromData(data);
     }
 
     readonly login: string;
 
-    static getCacheKey(login: string) {
+    static getCacheKey(login: string): string {
         return `users/${login}`;
     }
 
-    getCacheKey() {
+    getCacheKey(): string {
         return User.getCacheKey(this.login);
     }
 
     private constructor(originalData: api.User) {
         this.update(originalData);
     }
-    public update(data: api.User) {
+    update(data: api.User): void {
         Object.assign(this, {
-            login: data.login
+            login: data.login,
         });
     }
 }
@@ -79,13 +79,13 @@ export class User {
 export class Label {
     private static pool = createPool<Label, [api.RepoReference, api.Label], [api.RepoReference, string]>({
         fetchData: async (key) => {
-            return JSON.parse(await client.exec('GET', path('repos', key[0].owner, key[0].name, 'labels', key[1])));
+            return JSON.parse(await client.exec("GET", path("repos", key[0].owner, key[0].name, "labels", key[1])));
         },
-        construct: data => new Label(data[0], data[1]),
-        keyFromData: data => [data[0], data[1].name]
+        construct: (data) => new Label(data[0], data[1]),
+        keyFromData: (data) => [data[0], data[1].name],
     });
 
-    static fromData(repo: api.RepoReference, data: api.Label) {
+    static fromData(repo: api.RepoReference, data: api.Label): Label {
         return Label.pool.fromData([repo, data]);
     }
 
@@ -95,7 +95,7 @@ export class Label {
         this.update([repo, data]);
     }
 
-    update(data: [api.RepoReference, api.Label]) {
+    update(data: [api.RepoReference, api.Label]): void {
         Object.assign(this, { name: data[1].name, color: data[1].color });
     }
 }
@@ -108,7 +108,7 @@ export class IssueComment {
     readonly body: string;
     readonly repository: Repository;
 
-    static fromData(originalData: api.IssueComment, issue: Issue) {
+    static fromData(originalData: api.IssueComment, issue: Issue): IssueComment {
         return new IssueComment(originalData, issue);
     }
 
@@ -116,21 +116,21 @@ export class IssueComment {
         this.update(originalData);
     }
 
-    update(data: api.IssueComment) {
+    update(data: api.IssueComment): void {
         Object.assign(this, {
             id: data.id,
             user: User.fromData(data.user),
             created_at: parseDate(data.created_at),
             updated_at: parseDate(data.updated_at),
             body: data.body,
-            repository: parseRepoReferenceFromURL(data.issue_url)
+            repository: parseRepoReferenceFromURL(data.issue_url),
         });
     }
 
     async getReactions(): Promise<api.Reaction[]> {
         // GET /repos/:owner/:repo/issues/comments/:id/reactions
-        const reactions = await client.fetchIssueCommentReactions(parseRepoReferenceFromURL(this.originalData.url), this.id);
-        return reactions;
+        const repo = parseRepoReferenceFromURL(this.originalData.url);
+        return await client.fetchIssueCommentReactions(repo, this.id);
     }
 }
 
@@ -165,7 +165,7 @@ export class Milestone {
             number: originalData.number,
             title: originalData.title,
             description: originalData.description,
-            state: originalData.state
+            state: originalData.state,
         });
 
         this.creator = User.fromData(originalData.creator);
@@ -180,8 +180,8 @@ export class Milestone {
 
 export class Repository {
     private static cache = new WeakStringMap<Repository>();
-    public static create(owner: string, name: string) {
-        const key = owner + '/' + name;
+    static create(owner: string, name: string): Repository {
+        const key = owner + "/" + name;
         const result = Repository.cache.get(key);
         if (result === undefined) {
             const repo = new Repository(owner, name);
@@ -191,7 +191,7 @@ export class Repository {
         return result;
     }
 
-    public get reference(): api.RepoReference {
+    get reference(): api.RepoReference {
         return { name: this.name, owner: this.name };
     }
 
@@ -208,15 +208,15 @@ export abstract class IssueOrPullRequest {
         }
     }
 
-    static getCacheKey(repo: api.RepoReference, number: number, isPR: boolean) {
-        return IssueOrPullRequest.getCacheKeyBasePath(repo, number, isPR) + '.json';
+    static getCacheKey(repo: api.RepoReference, number: number, isPR: boolean): string {
+        return IssueOrPullRequest.getCacheKeyBasePath(repo, number, isPR) + ".json";
     }
 
-    static getCommentsCacheKey(repo: api.RepoReference, number: number, isPR: boolean) {
-        return IssueOrPullRequest.getCacheKeyBasePath(repo, number, isPR) + '.comments.json';
+    static getCommentsCacheKey(repo: api.RepoReference, number: number, isPR: boolean): string {
+        return IssueOrPullRequest.getCacheKeyBasePath(repo, number, isPR) + ".comments.json";
     }
 
-    static getCacheKeyBasePath(repo: api.RepoReference, number: number, isPR: boolean) {
+    static getCacheKeyBasePath(repo: api.RepoReference, number: number, isPR: boolean): string {
         const kind = isPR ? "pull_requests" : "issues";
         // 0000, 1000, 2000, etc
         const thousands = `${Math.floor(number / 1000)}000`;
@@ -271,7 +271,7 @@ export abstract class IssueOrPullRequest {
             body: originalData.body,
             state: originalData.state,
             locked: originalData.locked,
-            html_url: originalData.html_url
+            html_url: originalData.html_url,
         });
 
         this.repository = parseRepoReferenceFromURL(originalData.url);
@@ -283,53 +283,53 @@ export abstract class IssueOrPullRequest {
 
         // Intern some instances
         this.user = User.fromData(originalData.user);
-        this.labels = originalData.labels ? originalData.labels.map(l => Label.fromData(this.repository, l)) : [];
-        this.assignees = originalData.assignees.map(user => User.fromData(user));
+        this.labels = originalData.labels ? originalData.labels.map((l) => Label.fromData(this.repository, l)) : [];
+        this.assignees = originalData.assignees.map((user) => User.fromData(user));
     }
 
     /** Returns a string like 'Microsoft/TypeScript#14' */
     get fullName(): string {
-        return `${this.repository.owner}/${this.repository.name}#${this.number}`
+        return `${this.repository.owner}/${this.repository.name}#${this.number}`;
     }
 
-    update() {
+    update(): void {
         // TODO: impl
     }
 
     async getComments(): Promise<IssueComment[]> {
         const data = await client.fetchIssueComments(this);
-        return data.map(raw => IssueComment.fromData(raw, this));
+        return data.map((raw) => IssueComment.fromData(raw, this));
     }
 
     /**
-    * Adds a label to an issue or PR.
-    */
-    addLabel(...labels: string[]) {
-        return addAction(new Actions.Labels.Add(this, labels));
+     * Adds a label to an issue or PR.
+     */
+    addLabel(...labels: string[]): IAction {
+        return addAction(new Labels.Add(this, labels));
     }
     /**
      * Adds labels to an issue or PR.
      */
-    addLabels(labels: string[]) {
-        return addAction(new Actions.Labels.Add(this, labels));
+    addLabels(labels: string[]): IAction {
+        return addAction(new Labels.Add(this, labels));
     }
     /**
      * Deletes a label from an issue.
      */
-    removeLabel(...labels: string[]) {
-        return addAction(new Actions.Labels.Remove(this, labels));
+    removeLabel(...labels: string[]): IAction {
+        return addAction(new Labels.Remove(this, labels));
     }
     /**
      * Deletes labels from an issue.
      */
-    removeLabels(labels: string[]) {
-        return addAction(new Actions.Labels.Remove(this, labels));
+    removeLabels(labels: string[]): IAction {
+        return addAction(new Labels.Remove(this, labels));
     }
     /**
      * Sets, exactly, which labels are on an issue
      */
-    setLabels(...labels: string[]) {
-        return addAction(new Actions.Labels.Set(this, labels));
+    setLabels(...labels: string[]): IAction {
+        return addAction(new Labels.Set(this, labels));
     }
 
     /**
@@ -340,7 +340,7 @@ export abstract class IssueOrPullRequest {
      * }).
      * You can specify a null value to cause nothing to happen either way
      */
-    setHasLabels(labelMap: { [key: string]: boolean | null }) {
+    setHasLabels(labelMap: { [key: string]: boolean | null }): void {
         for (const key of Object.keys(labelMap)) {
             const value = labelMap[key];
             if (value === true) {
@@ -354,32 +354,32 @@ export abstract class IssueOrPullRequest {
     /**
      * Returns true if this issue has the specified label
      */
-    hasLabel(labelName: string | Label) {
-        const name = typeof labelName === 'string' ? labelName : labelName.name;
-        return this.labels.some(l => l.name === name);
+    hasLabel(labelName: string | Label): boolean {
+        const name = typeof labelName === "string" ? labelName : labelName.name;
+        return this.labels.some((l) => l.name === name);
     }
 
     /**
      * Adds or updates a comment with the specified slug to the issue
      */
-    addComment(slug: string, body: string) {
-        return addAction(new Actions.Comments.Add(this, slug, body));
+    addComment(slug: string, body: string): IAction {
+        return addAction(new Comments.Add(this, slug, body));
     }
 
-    lock() {
-        return addAction(new Actions.Issues.Lock(this));
+    lock(): IAction {
+        return addAction(new Issues.Lock(this));
     }
 
-    unlock() {
-        return addAction(new Actions.Issues.Unlock(this));
+    unlock(): IAction {
+        return addAction(new Issues.Unlock(this));
     }
 
-    close() {
-        return addAction(new Actions.Issues.Close(this));
+    close(): IAction {
+        return addAction(new Issues.Close(this));
     }
 
-    reopen() {
-        return addAction(new Actions.Issues.Reopen(this));
+    reopen(): IAction {
+        return addAction(new Issues.Reopen(this));
     }
 }
 
@@ -388,7 +388,7 @@ export class Issue extends IssueOrPullRequest {
         throw new Error("Don't call me");
     }
 
-    static fromIssueData(data: api.Issue) {
+    static fromIssueData(data: api.Issue): Issue {
         return new Issue(data);
     }
 
@@ -409,8 +409,8 @@ export class PullRequest extends IssueOrPullRequest {
         throw new Error("Don't call me");
     }
 
-    static getPRCacheKey(repo: api.RepoReference, number: number, isPR: boolean) {
-        return IssueOrPullRequest.getCacheKeyBasePath(repo, number, isPR) + 'pr.json';
+    static getPRCacheKey(repo: api.RepoReference, number: number, isPR: boolean): string {
+        return IssueOrPullRequest.getCacheKeyBasePath(repo, number, isPR) + "pr.json";
     }
 
     // TODO interning
@@ -434,7 +434,7 @@ export class PullRequest extends IssueOrPullRequest {
     }
 
     // TODO interning
-    static fromPullRequestData(prData: api.PullRequest, issueData: api.Issue) {
+    static fromPullRequestData(prData: api.PullRequest, issueData: api.Issue): PullRequest {
         return new PullRequest(prData, issueData);
     }
 
@@ -465,40 +465,40 @@ export class PullRequest extends IssueOrPullRequest {
             additions: prData.additions,
             deletions: prData.deletions,
             changed_files: prData.changed_files,
-            head: prData.head
+            head: prData.head,
         });
     }
 
-    public async getStatusSummary(): Promise<api.StatusSummary> {
+    async getStatusSummary(): Promise<api.StatusSummary> {
         // GET /repos/:owner/:repo/commits/:ref/status
         return (await client.fetchRefStatusSummary(this.repository.reference, this.head.sha)).state;
     }
 
-    public async getStatus(): Promise<api.CombinedStatus> {
+    async getStatus(): Promise<api.CombinedStatus> {
         // GET /repos/:owner/:repo/commits/:ref/status
         return (await client.fetchRefStatusSummary(this.repository.reference, this.head.sha));
     }
 
-    public async getReviews(): Promise<api.PullRequestReview[]> {
+    async getReviews(): Promise<api.PullRequestReview[]> {
         return await client.fetchPRReviews(this.repository.reference, this.number);
     }
 
-    public async getCommitsRaw(): Promise<api.PullRequestCommit[]> {
+    async getCommitsRaw(): Promise<api.PullRequestCommit[]> {
         return await client.fetchPRCommits(this);
     }
 
-    public async getFilesRaw(): Promise<api.PullRequestFile[]> {
+    async getFilesRaw(): Promise<api.PullRequestFile[]> {
         return await client.fetchPRFiles(this);
     }
 
-    public async getMergeableState(): Promise<boolean | null> {
+    async getMergeableState(): Promise<boolean | null> {
         if (this.merged) {
             return null;
         }
 
-        var retryCounter = 5;
+        let retryCounter = 5;
         while (this.mergeable === null && retryCounter > 0) {
-            const newData = await client.fetchPR(this.repository.reference, this.number);;
+            const newData = await client.fetchPR(this.repository.reference, this.number);
             if (newData.mergeable === null) {
                 console.log(`Sleep 3 seconds and try to get real mergeable state of ${this.number}`);
                 await sleep(3000);
@@ -513,7 +513,7 @@ export class PullRequest extends IssueOrPullRequest {
 }
 
 export class Project {
-    public static async create(projectId: number) {
+    static async create(projectId: number): Promise<Project> {
         const columnsRaw = await client.fetchProjectColumns(projectId);
         const columns: ProjectColumn[] = [];
         for (const raw of columnsRaw) {
@@ -525,11 +525,11 @@ export class Project {
     private constructor(public projectId: number, public columns: ProjectColumn[]) {
     }
 
-    public setIssueColumn(issue: IssueOrPullRequest, targetColumn: ProjectColumn | undefined) {
-        return addAction(new Actions.Issues.SetColumn(issue, this, targetColumn));
+    setIssueColumn(issue: IssueOrPullRequest, targetColumn: ProjectColumn | undefined): IAction {
+        return addAction(new Issues.SetColumn(issue, this, targetColumn));
     }
 
-    public async doSetIssueColumn(issue: IssueOrPullRequest, targetColumn: ProjectColumn | undefined): Promise<void> {
+    async doSetIssueColumn(issue: IssueOrPullRequest, targetColumn: ProjectColumn | undefined): Promise<void> {
         for (const sourceColumn of this.columns) {
             const card = sourceColumn.findProjectCardForIssue(issue);
             if (card !== undefined) {
@@ -549,13 +549,13 @@ export class Project {
         }
     }
 
-    public findColumnByName(name: string | RegExp): ProjectColumn | undefined {
-        for(const c of this.columns) {
-            if (typeof name === 'string') {
+    findColumnByName(name: string | RegExp): ProjectColumn | undefined {
+        for (const c of this.columns) {
+            if (typeof name === "string") {
                 if (c.name === name) {
                     return c;
                 }
-            } else if(name.test(c.name)) {
+            } else if (name.test(c.name)) {
                 return c;
             }
         }
@@ -564,18 +564,18 @@ export class Project {
 }
 
 export class ProjectColumn {
-    public static async create(columnId: number, name: string) {
+    static async create(columnId: number, name: string): Promise<ProjectColumn> {
         const cards = await client.fetchProjectColumnCards(columnId);
         return new ProjectColumn(columnId, name, cards);
     }
 
-    public cards: ProjectCard[];
+    cards: ProjectCard[];
 
     private constructor(public columnId: number, public name: string, cards: api.ProjectColumnCard[]) {
-        this.cards = cards.map(c => new ProjectCard(c));
+        this.cards = cards.map((c) => new ProjectCard(c));
     }
 
-    public findProjectCardForIssue(issue: IssueOrPullRequest): ProjectCard | undefined {
+    findProjectCardForIssue(issue: IssueOrPullRequest): ProjectCard | undefined {
         for (const card of this.cards) {
             if (issue.number === card.getIssueNumber()) {
                 return card;
@@ -586,12 +586,12 @@ export class ProjectColumn {
 }
 
 export class ProjectCard {
-    public id: number;
+    id: number;
     constructor(private data: api.ProjectColumnCard) {
         this.id = data.id;
     }
 
-    public getIssueNumber(): number | undefined {
+    getIssueNumber(): number | undefined {
         // https://api.github.com/repos/DefinitelyTyped/DefinitelyTyped/issues/17902
         const match = /https:\/\/api.github.com\/repos\/\S+\/\S+\/issues\/(\d+)/.exec(this.data.content_url);
         if (match === null) {
@@ -615,13 +615,21 @@ interface PoolSettings<KeyType, DataType, InstanceType> {
     keyToCacheKey?(key: KeyType): string;
 }
 
-function createPool<InstanceType extends { update(d: DataType): void }, DataType, KeyType>(settings: PoolSettings<KeyType, DataType, InstanceType>) {
+interface Pool<KeyType, DataType, InstanceType> {
+    fromKey(key: KeyType): Promise<InstanceType>;
+    fromData(data: DataType): InstanceType;
+}
+function createPool<
+    InstanceType extends { update(d: DataType): void },
+    DataType,
+    KeyType
+>(settings: PoolSettings<KeyType, DataType, InstanceType>): Pool<KeyType, DataType, InstanceType> {
     const pool = new WeakStringMap<InstanceType>();
     const keyToString = settings.keyToString || ((k: any) => k);
     const keyToCacheKey = settings.keyToCacheKey || ((k: any) => k);
 
-    return ({
-        fromKey: async function (key: KeyType) {
+    return {
+        async fromKey(key: KeyType): Promise<InstanceType> {
             const keyString = keyToString(key);
             const extant = pool.get(keyString);
             if (extant) return extant;
@@ -634,10 +642,10 @@ function createPool<InstanceType extends { update(d: DataType): void }, DataType
 
             const now = new Date();
             const data = await settings.fetchData(key);
-            cache && cache.save(data, cacheKey, now);
+            if (cache) cache.save(data, cacheKey, now);
             return settings.construct(data);
         },
-        fromData: function (data: DataType) {
+        fromData(data: DataType): InstanceType {
             const keyString = keyToString(settings.keyFromData(data));
             const extant = pool.get(keyString);
             if (extant) {
@@ -647,7 +655,6 @@ function createPool<InstanceType extends { update(d: DataType): void }, DataType
             const result = settings.construct(data);
             pool.set(keyString, result);
             return result;
-
-        }
-    });
+        },
+    };
 }

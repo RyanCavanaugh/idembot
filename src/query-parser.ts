@@ -1,12 +1,12 @@
-import { PRQuery } from './options';
+import { PRQuery } from "./options";
 
-export function parseQuery(json: any) {
-    if ('kind' in json) {
-        const kind = json['kind'];
+export function parseQuery(json: any): PRQuery {
+    if ("kind" in json) {
+        const kind = json.kind;
         switch (kind) {
-            case 'prs':
+            case "prs":
                 return parsePrsQuery(json);
-            case 'issues':
+            case "issues":
                 throw new Error("Issue queries NYI");
             default:
                 throw new Error(`Query kind '${kind}' must be "prs" or "issues"`);
@@ -18,19 +18,21 @@ export function parseQuery(json: any) {
 
 declare var pr: PRQuery;
 function parsePrsQuery(json: any): PRQuery {
-    const repo = getProperty<typeof pr.repo>(json, 'repo', null, r => /\w+\/\w+/.test(r));
-    const state = getProperty<typeof pr.state>(json, 'state', 'open', x => ['open', 'closed', 'all'].indexOf(x) >= 0);
-    const count = getProperty<typeof pr.count>(json, 'count', 'all', n => n === 'all' || typeof n === 'number');
-    const sort = getProperty<typeof pr.sort>(json, 'sort', 'created', x => ['created', 'updated', 'popularity', 'long-running'].indexOf(x) >= 0);
-    const direction = getProperty<typeof pr.direction>(json, 'direction', 'desc', x => ['asc', 'desc'].indexOf(x) >= 0);
+    const repo = getProperty<typeof pr.repo>(json, "repo", null, (r) => /\w+\/\w+/.test(r));
+    const state = getProperty<typeof pr.state>(json, "state", "open", (x) => ["open", "closed", "all"].indexOf(x) >= 0);
+    const count = getProperty<typeof pr.count>(json, "count", "all", (n) => n === "all" || typeof n === "number");
+    const sort = getProperty<typeof pr.sort>(json, "sort", "created", (x) =>
+        ["created", "updated", "popularity", "long-running"].indexOf(x) >= 0);
+    const direction = getProperty<typeof pr.direction>(json, "direction", "desc", (x) =>
+        ["asc", "desc"].indexOf(x) >= 0);
 
     return ({
         repo,
-        kind: 'prs',
+        kind: "prs",
         state,
         count,
         sort,
-        direction
+        direction,
     });
 }
 

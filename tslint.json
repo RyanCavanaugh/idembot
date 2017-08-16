@@ -1,0 +1,16 @@
+{
+    "extends": "tslint:latest",
+    "rules": {
+        "curly": false,
+        "interface-name": false, // Public API uses `IName`, hard to change now.
+        "max-classes-per-file": false,
+        "member-access": [true, "no-public"],
+        "member-ordering": false,
+        "no-console": false,
+        "no-namespace": false,
+        "no-shadowed-variable": false,
+        "object-literal-sort-keys": false,
+        "typedef": [true, "call-signature"],
+        "variable-name": false // Public API uses underscored names, hard to change now.
+    }
+}

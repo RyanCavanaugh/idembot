@@ -6,7 +6,8 @@
   "scripts": {
     "build": "node node_modules/typescript/lib/tsc -p .",
     "rev": "npm version patch && npm publish && git push",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "tslint --project tsconfig.json --format stylish"
   },
   "typings": "bin/index.d.ts",
   "repository": {

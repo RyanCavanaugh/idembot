@@ -1,5 +1,5 @@
-import fs = require('fs-extra');
-import path = require('path');
+import fs = require("fs-extra");
+import { dirname, join as joinPaths } from "path";
 
 export interface CacheSaveEntry<T> {
     timestamp: string | undefined;
@@ -9,7 +9,7 @@ export interface CacheSaveEntry<T> {
 export type CacheLoadResult<T> = {
     exists: true,
     content: T,
-    timestamp: string
+    timestamp: string,
 } | { exists: false };
 
 export interface Cache {
@@ -18,21 +18,21 @@ export interface Cache {
 }
 
 export function createCache(cacheRoot: string): Cache {
-    function getFilename(key: string) {
-        return path.join(cacheRoot, key);
+    function getFilename(key: string): string {
+        return joinPaths(cacheRoot, key);
     }
 
-    async function save(content: any, key: string, timestamp: Date) {
+    async function save(content: any, key: string, timestamp: Date): Promise<void> {
         const filePath = getFilename(key);
-        await fs.mkdirp(path.dirname(filePath));
+        await fs.mkdirp(dirname(filePath));
         const withTime: CacheSaveEntry<any> = { timestamp: timestamp.toUTCString(), content };
-        await fs.writeFile(filePath, JSON.stringify(withTime), { encoding: 'utf8' });
+        await fs.writeFile(filePath, JSON.stringify(withTime), { encoding: "utf8" });
     }
 
     async function load(key: string): Promise<CacheLoadResult<any>> {
         const path = getFilename(key);
         if (await fs.pathExists(path)) {
-            const result: CacheLoadResult<any> = JSON.parse(await fs.readFile(path, 'utf8'));
+            const result: CacheLoadResult<any> = JSON.parse(await fs.readFile(path, "utf8"));
             result.exists = true;
             return result;
         } else {
@@ -44,6 +44,6 @@ export function createCache(cacheRoot: string): Cache {
 
     return {
         save,
-        load
+        load,
     };
 }
