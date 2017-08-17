@@ -1,7 +1,7 @@
 import moment = require("moment");
 import sleep = require("sleep-promise");
 
-import { IAction, Labels, Comments, Issues } from "./action";
+import { Comments, IAction, Issues, Labels, PullRequests } from "./action";
 import { addAction } from "./actionRunner";
 import path from "./build-path";
 import { Cache } from "./cache";
@@ -23,7 +23,7 @@ function parseDate(s: string | null): moment.Moment | null {
 }
 
 export function parseBasicRepoReference(ownerSlashName: string): Repository {
-    const m = /(\w+)\/(\w+)/.exec(ownerSlashName);
+    const m = /^([\w-]+)\/([\w-]+)$/.exec(ownerSlashName);
     if (!m) {
         throw new Error(`Expected "${ownerSlashName}" to be in format "owner/name"`);
     }
@@ -41,15 +41,15 @@ export function parseRepoReferenceFromURL(url: string): Repository {
 }
 
 export class User {
-    private static pool = createPool<User, api.User, string>({
+    private static readonly pool = createPool<User, api.User, string>({
         fetchData: async (login) => {
             return JSON.parse(await client.exec("GET", path("users", login)));
         },
         construct: (data) => new User(data),
         keyFromData: (data) => data.login,
     });
-    static async fromLogin(login: string): Promise<User> {
-        return await User.pool.fromKey(login);
+    static fromLogin(login: string): Promise<User> {
+        return User.pool.fromKey(login);
     }
 
     static fromData(data: api.User): User {
@@ -91,7 +91,7 @@ export class Label {
 
     readonly name: string;
     readonly color: string;
-    private constructor(public repo: api.RepoReference, data: api.Label) {
+    private constructor(readonly repo: api.RepoReference, data: api.Label) {
         this.update([repo, data]);
     }
 
@@ -112,7 +112,7 @@ export class IssueComment {
         return new IssueComment(originalData, issue);
     }
 
-    private constructor(private originalData: api.IssueComment, public issue: Issue) {
+    private constructor(private originalData: api.IssueComment, readonly issue: Issue) {
         this.update(originalData);
     }
 
@@ -127,10 +127,10 @@ export class IssueComment {
         });
     }
 
-    async getReactions(): Promise<api.Reaction[]> {
+    getReactions(): Promise<api.Reaction[]> {
         // GET /repos/:owner/:repo/issues/comments/:id/reactions
         const repo = parseRepoReferenceFromURL(this.originalData.url);
-        return await client.fetchIssueCommentReactions(repo, this.id);
+        return client.fetchIssueCommentReactions(repo, this.id);
     }
 }
 
@@ -192,19 +192,19 @@ export class Repository {
     }
 
     get reference(): api.RepoReference {
-        return { name: this.name, owner: this.name };
+        return { name: this.name, owner: this.owner };
     }
 
-    private constructor(public readonly owner: string, public readonly name: string) {
+    private constructor(readonly owner: string, readonly name: string) {
     }
 }
 
 export abstract class IssueOrPullRequest {
-    static async fromData(data: api.Issue): Promise<Issue | PullRequest> {
+    static fromData(data: api.Issue): Promise<Issue | PullRequest> {
         if (data.pull_request) {
-            return await PullRequest.fromReference(parseRepoReferenceFromURL(data.url), data.number);
+            return PullRequest.fromReference(parseRepoReferenceFromURL(data.url), data.number);
         } else {
-            return await Issue.fromIssueData(data);
+            return Promise.resolve(Issue.fromIssueData(data));
         }
     }
 
@@ -273,7 +273,6 @@ export abstract class IssueOrPullRequest {
             locked: originalData.locked,
             html_url: originalData.html_url,
         });
-
         this.repository = parseRepoReferenceFromURL(originalData.url);
 
         // Parse some dates
@@ -342,11 +341,21 @@ export abstract class IssueOrPullRequest {
      */
     setHasLabels(labelMap: { [key: string]: boolean | null }): void {
         for (const key of Object.keys(labelMap)) {
+            const alreadyHas = this.labels.some((l) => l.name === key);
             const value = labelMap[key];
-            if (value === true) {
-                this.addLabel(key);
-            } else if (value === false) {
-                this.removeLabel(key);
+            switch (value) {
+                case true:
+                    if (!alreadyHas) {
+                        this.addLabel(key);
+                    }
+                    break;
+                case false:
+                    if (alreadyHas) {
+                        this.removeLabel(key);
+                    }
+                    break;
+                case null:
+                    // Do nothing
             }
         }
     }
@@ -438,35 +447,35 @@ export class PullRequest extends IssueOrPullRequest {
         return new PullRequest(prData, issueData);
     }
 
-    head: api.Commit;
-    merge_commit_sha: string;
-    merged: boolean;
+    readonly head: api.Commit;
+    /**
+     * See comment at https://developer.github.com/v3/pulls/#get-a-single-pull-request
+     */
+    readonly merge_commit_sha: string;
+    readonly merged: boolean;
     mergeable: boolean | null;
-    mergeable_state: api.MergeableState;
+    readonly mergeable_state: api.MergeableState;
 
-    comments: number;
-    commits: number;
-    additions: number;
-    deletions: number;
-    changed_files: number;
+    readonly comments: number;
+    readonly commits: number;
+    readonly additions: number;
+    readonly deletions: number;
+    readonly changed_files: number;
 
     readonly isPullRequest: boolean = true;
 
     private constructor(prData: api.PullRequest, issueData: api.Issue) {
         super(issueData);
-
-        Object.assign(this, {
-            merge_commit_sha: prData.merge_commit_sha,
-            merged: prData.merged,
-            mergeable: prData.mergeable,
-            mergeable_state: prData.mergeable_state,
-            comments: prData.comments,
-            commits: prData.commits,
-            additions: prData.additions,
-            deletions: prData.deletions,
-            changed_files: prData.changed_files,
-            head: prData.head,
-        });
+        this.merge_commit_sha = prData.merge_commit_sha;
+        this.merged = prData.merged;
+        this.mergeable = prData.mergeable;
+        this.mergeable_state = prData.mergeable_state;
+        this.comments = prData.comments;
+        this.commits = prData.commits;
+        this.additions = prData.additions;
+        this.deletions = prData.deletions;
+        this.changed_files = prData.changed_files;
+        this.head = prData.head;
     }
 
     async getStatusSummary(): Promise<api.StatusSummary> {
@@ -474,21 +483,21 @@ export class PullRequest extends IssueOrPullRequest {
         return (await client.fetchRefStatusSummary(this.repository.reference, this.head.sha)).state;
     }
 
-    async getStatus(): Promise<api.CombinedStatus> {
+    getStatus(): Promise<api.CombinedStatus> {
         // GET /repos/:owner/:repo/commits/:ref/status
-        return (await client.fetchRefStatusSummary(this.repository.reference, this.head.sha));
+        return client.fetchRefStatusSummary(this.repository.reference, this.head.sha);
     }
 
-    async getReviews(): Promise<api.PullRequestReview[]> {
-        return await client.fetchPRReviews(this.repository.reference, this.number);
+    getReviews(): Promise<api.PullRequestReview[]> {
+        return client.fetchPRReviews(this.repository.reference, this.number);
     }
 
-    async getCommitsRaw(): Promise<api.PullRequestCommit[]> {
-        return await client.fetchPRCommits(this);
+    getCommitsRaw(): Promise<api.PullRequestCommit[]> {
+        return client.fetchPRCommits(this);
     }
 
-    async getFilesRaw(): Promise<api.PullRequestFile[]> {
-        return await client.fetchPRFiles(this);
+    getFilesRaw(): Promise<api.PullRequestFile[]> {
+        return client.fetchPRFiles(this);
     }
 
     async getMergeableState(): Promise<boolean | null> {
@@ -510,6 +519,10 @@ export class PullRequest extends IssueOrPullRequest {
         }
         return this.mergeable;
     }
+
+    merge(): IAction {
+        return addAction(new PullRequests.Merge(this));
+    }
 }
 
 export class Project {
@@ -522,7 +535,7 @@ export class Project {
         return new Project(projectId, columns);
     }
 
-    private constructor(public projectId: number, public columns: ProjectColumn[]) {
+    private constructor(readonly projectId: number, readonly columns: ProjectColumn[]) {
     }
 
     setIssueColumn(issue: IssueOrPullRequest, targetColumn: ProjectColumn | undefined): IAction {
@@ -571,7 +584,7 @@ export class ProjectColumn {
 
     cards: ProjectCard[];
 
-    private constructor(public columnId: number, public name: string, cards: api.ProjectColumnCard[]) {
+    private constructor(readonly columnId: number, readonly name: string, cards: ReadonlyArray<api.ProjectColumnCard>) {
         this.cards = cards.map((c) => new ProjectCard(c));
     }
 
@@ -586,8 +599,8 @@ export class ProjectColumn {
 }
 
 export class ProjectCard {
-    id: number;
-    constructor(private data: api.ProjectColumnCard) {
+    readonly id: number;
+    constructor(private readonly data: api.ProjectColumnCard) {
         this.id = data.id;
     }
 
@@ -619,6 +632,7 @@ interface Pool<KeyType, DataType, InstanceType> {
     fromKey(key: KeyType): Promise<InstanceType>;
     fromData(data: DataType): InstanceType;
 }
+
 function createPool<
     InstanceType extends { update(d: DataType): void },
     DataType,

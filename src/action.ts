@@ -1,6 +1,6 @@
 import * as client from "./client";
 
-import { IssueComment, IssueOrPullRequest, Project, ProjectColumn } from "./github";
+import { IssueComment, IssueOrPullRequest, Project, ProjectColumn, PullRequest } from "./github";
 
 export type OnChangeHandler = (item: IssueOrPullRequest) => void;
 
@@ -44,7 +44,7 @@ export abstract class BaseAction implements IActionImplementation {
 }
 
 export abstract class BaseIssueAction extends BaseAction {
-    constructor(public issue: IssueOrPullRequest) {
+    constructor(readonly issue: IssueOrPullRequest) {
         super();
     }
 
@@ -57,9 +57,48 @@ export abstract class BaseIssueAction extends BaseAction {
     }
 }
 
+export namespace PullRequests {
+    export abstract class Base extends BaseAction {
+        constructor(readonly pr: PullRequest) {
+            super();
+        }
+    }
+
+    export class Merge extends Base {
+        get summary(): string {
+            return `Merge pull request ${this.pr.fullName}`;
+        }
+
+        async execute(_info: ActionExecuteInfo): Promise<void> {
+            await client.mergePR(this.pr, await this.getMergeOptions());
+        }
+
+        private async getMergeOptions(): Promise<client.MergePrOptions> {
+            const { pr } = this;
+            const canMerge = await pr.getMergeableState();
+            if (!canMerge) {
+                throw new Error("TODO");
+            }
+
+            const commits = await pr.getCommitsRaw();
+
+            const title = `Merge PR #${pr.number}: ${pr.title}`;
+
+            let message = "";
+            for (const commit of commits) {
+                message += `* ${commit.commit.message}\n`;
+            }
+
+            const sha = commits[commits.length - 1].sha;
+
+            return { title, message, sha };
+        }
+    }
+}
+
 export namespace Labels {
     export abstract class Base extends BaseIssueAction {
-        constructor(issue: IssueOrPullRequest, public labels: string[]) {
+        constructor(issue: IssueOrPullRequest, readonly labels: ReadonlyArray<string>) {
             super(issue);
         }
     }
@@ -143,12 +182,12 @@ export namespace Comments {
     }
 
     export abstract class Base extends BaseIssueAction {
-        constructor(issue: IssueOrPullRequest, public slug: string) {
+        constructor(issue: IssueOrPullRequest, readonly slug: string) {
             super(issue);
         }
     }
     export class Add extends Base {
-        constructor(issue: IssueOrPullRequest, slug: string, public body: string) {
+        constructor(issue: IssueOrPullRequest, slug: string, readonly body: string) {
             super(issue, slug);
         }
         get summary(): string {
@@ -183,7 +222,7 @@ export namespace Comments {
 
 export namespace Assignees {
     export abstract class Base extends BaseIssueAction {
-        constructor(issue: IssueOrPullRequest, public assignees: string[]) {
+        constructor(issue: IssueOrPullRequest, readonly assignees: ReadonlyArray<string>) {
             super(issue);
         }
     }
@@ -205,7 +244,7 @@ export namespace Issues {
             return `Move issue ${this.issue.fullName} to column ${column} in project ${this.project.projectId}`;
         }
 
-        constructor(issue: IssueOrPullRequest, public project: Project, public column: ProjectColumn | undefined) {
+        constructor(issue: IssueOrPullRequest, readonly project: Project, readonly column: ProjectColumn | undefined) {
             super(issue);
         }
 

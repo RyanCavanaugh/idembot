@@ -5,7 +5,8 @@ import createBot from "./index";
 import { ParsedCommandLineOptions, Query, SetupOptions } from "./options";
 import { parseQuery } from "./query-parser";
 
-const oauth = process.env.AUTH_TOKEN;
+const authTokenEnvVar = "AUTH_TOKEN";
+const oauth = process.env[authTokenEnvVar];
 
 async function parseQueryFile(filename: string): Promise<Query> {
     return parseQuery(JSON.parse(await fs.readFile(filename, "utf-8")));
@@ -30,7 +31,6 @@ async function main(argv: string[]): Promise<number> {
 
     const filename = commander.file;
     const queries = (commander.query && commander.query.split(",")) || [];
-    console.log(queries);
     const dry = !!commander.dry;
     const single = commander.single || "";
 
@@ -96,7 +96,7 @@ async function main(argv: string[]): Promise<number> {
 
     // Check for oauth token
     if (oauth === undefined) {
-        console.log("You must set the AUTH_TOKEN environment variable to a suitable OAuth token");
+        console.error(`You must set the ${authTokenEnvVar} environment variable to a suitable OAuth token`);
         return -1;
     }
 

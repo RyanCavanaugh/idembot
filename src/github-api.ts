@@ -1,7 +1,7 @@
 /** Not actually part of the GitHub API */
 export interface RepoReference {
-    owner: string;
-    name: string;
+    readonly owner: string;
+    readonly name: string;
 }
 
 export interface Repository {
@@ -59,7 +59,7 @@ export interface Issue {
         html_url: string;
         diff_url: string;
         patch_url: string;
-    }
+    };
 }
 
 /**
@@ -98,8 +98,7 @@ export interface PullRequestFromList extends Issue {
         html_url: string;
         diff_url: string;
         patch_url: string;
-    }
-
+    };
 }
 
 export interface PullRequestReview {
@@ -117,8 +116,11 @@ export interface PullRequestReview {
  * dirty: Merge conflict. Merging will be blocked
  * unknown: Mergeability was not checked yet. Merging will be blocked
  * blocked: Blocked by a failing/missing required status check.
- * behind: Head branch is behind the base branch. Only if required status checks is enabled but loose policy is not. Merging will be blocked.
- * unstable: Failing/pending commit status that is not part of the required status checks. Merging is allowed (yellow box).
+ * behind: Head branch is behind the base branch.
+ *         Only if required status checks is enabled but loose policy is not.
+ *         Merging will be blocked.
+ * unstable: Failing/pending commit status that is not part of the required status checks.
+ *           Merging is allowed (yellow box).
  * has_hooks: This is for Enterprise only, if a repo has custom pre-receive hooks. Merging is allowed (green box).
  * clean: No conflicts, everything good. Merging is allowed (green box).
  */
@@ -153,19 +155,21 @@ export interface PullRequestFile {
     changes: number;
 }
 
+// https://developer.github.com/v3/pulls/#list-commits-on-a-pull-request
 export interface PullRequestCommit {
     url: string;
     sha: string;
     commit: {
         author: Committer;
         committer: Committer;
+        message: string;
     };
     author: User;
     committer: User;
-    parents: {
+    parents: Array<{
         url: string;
         sha: string;
-    }[];
+    }>;
 }
 
 export interface Committer {
@@ -190,7 +194,8 @@ export interface CombinedStatus {
     total_count: number;
 }
 
-// e.g. from https://api.github.com/repos/DefinitelyTyped/DefinitelyTyped/statuses/210d1978139c51386a145af2c36440b3967535e9
+// e.g., from:
+// https://api.github.com/repos/DefinitelyTyped/DefinitelyTyped/statuses/210d1978139c51386a145af2c36440b3967535e9
 export interface CommitStatusesElement {
     url: string;
     id: number;
@@ -201,10 +206,6 @@ export interface CommitStatusesElement {
     created_at: string;
     updated_at: string;
     creator: User;
-}
-
-export interface CommitStatus {
-
 }
 
 export interface User {

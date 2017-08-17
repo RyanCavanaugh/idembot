@@ -5,8 +5,9 @@ import * as client from "./client";
 import { Issue, IssueOrPullRequest, PullRequest, useCache } from "./github";
 import { ParsedCommandLineOptions, SetupOptions } from "./options";
 export {
-    User, Issue, PullRequest, Milestone, Label, IssueOrPullRequest, Project, ProjectCard, ProjectColumn,
+    User, Issue, IssueComment, PullRequest, Milestone, Label, IssueOrPullRequest, Project, ProjectCard, ProjectColumn,
 } from "./github";
+export { PullRequestCommit, PullRequestReview, RepoReference } from "./github-api";
 
 process.on("unhandledRejection", (err: any) => {
     console.error(err);
@@ -38,7 +39,7 @@ async function runRule(issue: IssueOrPullRequest, rule: (issue: any) => void, na
         }
     } catch (e) {
         console.error(`Rule ${name} encountered exception running on ${issue.html_url}`);
-        console.error(e);
+        console.error(e.stack);
     }
 }
 

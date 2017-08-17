@@ -5,12 +5,14 @@
     "compilerOptions": {
         "outDir": "bin",
         "module": "commonjs",
-        "target": "es5",
-        "lib": ["es2015"],
+        "target": "esnext",
+        "lib": ["es2017"],
         "strict": true,
         "noUnusedLocals": true,
         "noUnusedParameters": true,
-        "sourceMap": false,
+        "noFallthroughCasesInSwitch": true,
+        "noImplicitReturns": true,
+        "sourceMap": true,
         "declaration": true,
 
         "baseUrl": ".",
