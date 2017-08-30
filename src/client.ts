@@ -318,6 +318,9 @@ export async function exec(method: string, path: string, opts?: ExecOptions): Pr
     }
 
     console.log(`[${lastRateLimitRemaining} / ${lastRateLimit}] HTTPS: ${method} https://${hostname}${fullPath}`);
+    if (opts.body) {
+        console.log(` POST -> ${opts.body}`);      
+    }
 
     return new Promise<string>((resolve, reject) => {
         const req = https.request({
