@@ -572,7 +572,8 @@ export class ProjectColumn {
     cards: ProjectCard[];
 
     private constructor(public columnId: number, public name: string, cards: api.ProjectColumnCard[]) {
-        this.cards = cards.map((c) => new ProjectCard(c));
+        this.cards = cards.map(c => new ProjectCard(c));
+        console.log(`Initialized column ${name} with ${cards.length} cards`);
     }
 
     findProjectCardForIssue(issue: IssueOrPullRequest): ProjectCard | undefined {
