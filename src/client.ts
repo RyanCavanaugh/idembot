@@ -193,7 +193,8 @@ export function fetchProjectColumns(projectId: number): Promise<api.ProjectColum
 }
 
 export function fetchProjectColumnCards(columnId: number): Promise<api.ProjectColumnCard[]> {
-    return parseGet(path("projects", "columns", columnId, "cards"), { preview: ProjectsPreview }) as
+    console.log(`Fetch column cards for column ${columnId}`);
+    return parseGetPaged(path("projects", "columns", columnId, "cards"), 30, { preview: ProjectsPreview }) as
         Promise<api.ProjectColumnCard[]>;
 }
 
@@ -295,13 +296,13 @@ export async function fetchRefStatusSummary(repo: api.RepoReference, ref: string
     return parseGet(path("repos", repo.owner, repo.name, "commits", ref, "status")) as Promise<api.CombinedStatus>;
 }
 
-async function execPaged(path: string, perPage: number = 100): Promise<Array<{}>> {
+async function execPaged(path: string, perPage: number = 100, opts: ExecOptions = {}): Promise<Array<{}>> {
     const result: Array<{}> = [];
     let pageNumber = 1;
     while (true) {
         console.log(`Fetch page ${pageNumber}...`);
         const qs = { page: pageNumber.toString(), per_page: perPage.toString() };
-        const arr = await parseGet(path, { queryString: qs });
+        const arr = await parseGet(path, { ...opts, queryString: qs });
         if (!Array.isArray(arr)) {
             throw new Error("Didn't parse an array from a paged fetch");
         }
@@ -336,6 +337,9 @@ export async function exec(
     const bodyStream = opts.body === undefined ? undefined : Buffer.from(opts.body);
     const path = getPathWithQuery(basePath, opts.queryString);
     console.log(`[${lastRateLimitRemaining} / ${lastRateLimit}] HTTPS: ${method} https://${hostname}${path}`);
+    if (opts.body) {
+        console.log(` POST -> ${opts.body}`);
+    }
     const headers = getHeaders(bodyStream, opts.preview);
     return new Promise<string>((resolve, reject) => {
         const req = https.request({ method, path, headers, hostname }, (res) => {
@@ -410,4 +414,8 @@ function getHeaders(bodyStream: Buffer | undefined, preview: string | undefined)
 
 async function parseGet(path: string, opts?: ExecOptions): Promise<{}> {
     return JSON.parse(await exec("GET", path, opts));
+}
+
+async function parseGetPaged(path: string, pageSize?: number, opts?: ExecOptions): Promise<{}> {
+    return await execPaged(path, pageSize, opts);
 }

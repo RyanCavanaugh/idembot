@@ -31,6 +31,7 @@ async function main(argv: string[]): Promise<number> {
 
     const filename = commander.file;
     const queries = (commander.query && commander.query.split(",")) || [];
+    console.log(queries);
     const dry = !!commander.dry;
     const single = commander.single || "";
 
