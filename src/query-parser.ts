@@ -19,12 +19,12 @@ export function parseQuery(json: any): PRQuery {
 declare var pr: PRQuery;
 function parsePrsQuery(json: any): PRQuery {
     const repo = getProperty<typeof pr.repo>(json, "repo", null, (r) => /\w+\/\w+/.test(r));
-    const state = getProperty<typeof pr.state>(json, "state", "open", (x) => ["open", "closed", "all"].indexOf(x) >= 0);
+    const state = getProperty<typeof pr.state>(json, "state", "open", (x) => ["open", "closed", "all"].includes(x));
     const count = getProperty<typeof pr.count>(json, "count", "all", (n) => n === "all" || typeof n === "number");
     const sort = getProperty<typeof pr.sort>(json, "sort", "created", (x) =>
-        ["created", "updated", "popularity", "long-running"].indexOf(x) >= 0);
+        ["created", "updated", "popularity", "long-running"].includes(x));
     const direction = getProperty<typeof pr.direction>(json, "direction", "desc", (x) =>
-        ["asc", "desc"].indexOf(x) >= 0);
+        ["asc", "desc"].includes(x));
 
     return ({
         repo,

@@ -9,6 +9,7 @@
         "no-console": false,
         "no-namespace": false,
         "no-shadowed-variable": false,
+        "no-this-assignment": [true, { "allow-destructuring": true }],
         "object-literal-sort-keys": false,
         "typedef": [true, "call-signature"],
         "variable-name": false // Public API uses underscored names, hard to change now.

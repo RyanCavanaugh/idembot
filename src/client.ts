@@ -26,7 +26,7 @@ export async function getMyLogin(): Promise<string> {
     return me;
 }
 
-export async function addLabels(issue: Issue, labels: string[]): Promise<void> {
+export async function addLabels(issue: Issue, labels: ReadonlyArray<string>): Promise<void> {
     // https://developer.github.com/v3/issues/labels/#add-labels-to-an-issue
     const body = JSON.stringify(labels);
     await exec(
@@ -36,7 +36,7 @@ export async function addLabels(issue: Issue, labels: string[]): Promise<void> {
     );
 }
 
-export async function removeLabels(issue: Issue, labels: string[]): Promise<void> {
+export async function removeLabels(issue: Issue, labels: ReadonlyArray<string>): Promise<void> {
     // https://developer.github.com/v3/issues/labels/#remove-a-label-from-an-issue
     for (const label of labels) {
         await exec(
@@ -46,7 +46,7 @@ export async function removeLabels(issue: Issue, labels: string[]): Promise<void
     }
 }
 
-export async function setLabels(issue: Issue, labels: string[]): Promise<void> {
+export async function setLabels(issue: Issue, labels: ReadonlyArray<string>): Promise<void> {
     // https://developer.github.com/v3/issues/labels/#replace-all-labels-for-an-issue
     const body = JSON.stringify(labels);
     await exec(
@@ -229,6 +229,7 @@ export async function fetchIssueComments(issue: Issue): Promise<api.IssueComment
 }
 
 export async function fetchPRCommits(issue: PullRequest): Promise<api.PullRequestCommit[]> {
+    // https://developer.github.com/v3/pulls/#list-commits-on-a-pull-request
     const raw = await execPaged(path(
         "repos", issue.repository.owner, issue.repository.name, "pulls", issue.number, "commits"));
     return raw as api.PullRequestCommit[];
@@ -251,16 +252,42 @@ export async function fetchPR(repo: api.RepoReference, number: number | string):
     return parseGet(path("repos", repo.owner, repo.name, "pulls", number)) as Promise<api.PullRequest>;
 }
 
+export interface MergePrOptions {
+    readonly title: string;
+    readonly message: string;
+    readonly sha: string;
+}
+export async function mergePR(pr: PullRequest, { title, message, sha }: MergePrOptions): Promise<void> {
+    // https://developer.github.com/v3/pulls/#merge-a-pull-request-merge-button
+    await exec("PUT", path("repos", pr.repository.owner, pr.repository.name, "pulls", pr.number, "merge"), {
+        body: JSON.stringify({
+            commit_title: title,
+            commit_message: message,
+            sha,
+            merge_method: "squash",
+        }),
+    });
+}
+
 export function fetchIssue(repo: api.RepoReference, number: number | string): Promise<api.Issue> {
     return parseGet(path("repos", repo.owner, repo.name, "issues", number)) as Promise<api.Issue>;
 }
 
-export function fetchPRReviews(repo: api.RepoReference, number: number): Promise<api.PullRequestReview[]> {
+export async function fetchPRReviews(repo: api.RepoReference, number: number): Promise<api.PullRequestReview[]> {
+    const url = path("repos", repo.owner, repo.name, "pulls", number, "reviews");
     // https://developer.github.com/v3/pulls/reviews/#list-reviews-on-a-pull-request
     // GET /repos/:owner/:repo/pulls/:number/reviews
-    return parseGet(path("repos", repo.owner, repo.name, "pulls", number, "reviews"), {
-        preview: "application/vnd.github.black-cat-preview+json",
-    }) as Promise<api.PullRequestReview[]>;
+    try {
+        return await parseGet(url, {
+            preview: "application/vnd.github.black-cat-preview+json",
+        }) as Promise<api.PullRequestReview[]>;
+    } catch (e) {
+        if (e instanceof ExecError && e.statusCode === 404) {
+            // No reviews
+            return [];
+        }
+        throw e;
+    }
 }
 
 export async function fetchRefStatusSummary(repo: api.RepoReference, ref: string): Promise<api.CombinedStatus> {
@@ -293,48 +320,38 @@ export interface ExecOptions {
     preview?: string;
 }
 
-let lastRateLimit = 5000;
-let lastRateLimitRemaining = 5000;
-export async function exec(method: string, path: string, opts?: ExecOptions): Promise<string> {
-    opts = opts || {};
+export class ExecError extends Error {
+    constructor(message: string, readonly statusCode: number) {
+        super(message);
+    }
+}
 
+let lastRateLimit = -1; // starts off unknown
+let lastRateLimitRemaining = -1;
+export async function exec(
+    method: "GET" | "PUT" | "POST" | "DELETE" | "PATCH",
+    basePath: string,
+    opts: ExecOptions = {},
+    ): Promise<string> {
     const hostname = "api.github.com";
-    const headers: any = {
-        "User-Agent": "RyanCavanaugh idembot",
-        "Accept": opts.preview || "application/vnd.github.squirrel-girl-preview+json",
-        "Authorization": `token ${oauthToken}`,
-    };
-
     const bodyStream = opts.body === undefined ? undefined : Buffer.from(opts.body);
-    if (bodyStream !== undefined) {
-        headers["Content-Type"] = "application/json";
-        headers["Content-Length"] = bodyStream.length;
-    }
-
-    let fullPath = path;
-    if (opts.queryString && Object.keys(opts.queryString).length > 0) {
-        const encoded = Object.keys(opts.queryString).map((k) =>
-            k + "=" + encodeURIComponent(opts!.queryString![k])).join("&");
-        fullPath = fullPath + "?" + encoded;
-    }
-
-    console.log(`[${lastRateLimitRemaining} / ${lastRateLimit}] HTTPS: ${method} https://${hostname}${fullPath}`);
+    const path = getPathWithQuery(basePath, opts.queryString);
+    console.log(`[${lastRateLimitRemaining} / ${lastRateLimit}] HTTPS: ${method} https://${hostname}${path}`);
     if (opts.body) {
-        console.log(` POST -> ${opts.body}`);      
+        console.log(` POST -> ${opts.body}`);
     }
-
+    const headers = getHeaders(bodyStream, opts.preview);
     return new Promise<string>((resolve, reject) => {
-        const req = https.request({
-            method,
-            path: fullPath,
-            headers,
-            hostname,
-        }, (res) => {
-            lastRateLimit = +(res.headers["x-ratelimit-limit"]);
-            lastRateLimitRemaining = +(res.headers["x-ratelimit-remaining"]);
-            if (res.statusCode! >= 400) {
-                console.log(`Error! Status code ${res.statusCode} returned`);
-                reject(`Status code ${res.statusCode} returned`);
+        const req = https.request({ method, path, headers, hostname }, (res) => {
+            // console.log('Headers: ' + JSON.stringify(res.headers, undefined, 2));
+            lastRateLimit = parseIntFromHeader(res.headers["x-ratelimit-limit"]);
+            lastRateLimitRemaining = parseIntFromHeader(res.headers["x-ratelimit-remaining"]);
+            const { statusCode } = res;
+            if (statusCode === undefined) {
+                throw new Error();
+            }
+            if (statusCode >= 400) {
+                reject(new ExecError(`Status code ${statusCode} returned from ${basePath}`, statusCode));
                 return;
             }
 
@@ -347,16 +364,52 @@ export async function exec(method: string, path: string, opts?: ExecOptions): Pr
                 resolve(data);
             });
             res.on("error", (err) => {
-                console.log("Connection Error!");
-                console.log(err);
+                console.error("Connection Error!");
+                console.error(err);
                 reject(err);
             });
+        });
+        req.on("error", (e) => {
+            console.error(e);
+            reject(e);
         });
         if (bodyStream !== undefined) {
             req.write(bodyStream);
         }
         req.end();
     });
+}
+
+function parseIntFromHeader(header: string | string[]): number {
+    if (typeof header !== "string")
+        throw new Error();
+    const int = Number.parseInt(header);
+    if (Number.isNaN(int))
+        throw new Error();
+    return int;
+}
+
+function getPathWithQuery(basePath: string, queryString: { [key: string]: string } | undefined): string {
+    let fullPath = basePath;
+    if (queryString && Object.keys(queryString).length > 0) {
+        const encoded = Object.keys(queryString).map((k) =>
+            k + "=" + encodeURIComponent(queryString[k])).join("&");
+        fullPath = fullPath + "?" + encoded;
+    }
+    return fullPath;
+}
+
+function getHeaders(bodyStream: Buffer | undefined, preview: string | undefined): { [key: string]: string | number } {
+    const headers: { [key: string]: string | number } = {
+        "User-Agent": "RyanCavanaugh idembot",
+        "Accept": preview || "application/vnd.github.squirrel-girl-preview+json",
+        "Authorization": `token ${oauthToken}`,
+    };
+    if (bodyStream !== undefined) {
+        headers["Content-Type"] = "application/json";
+        headers["Content-Length"] = bodyStream.length;
+    }
+    return headers;
 }
 
 async function parseGet(path: string, opts?: ExecOptions): Promise<{}> {
