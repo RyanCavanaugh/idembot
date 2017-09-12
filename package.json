@@ -1,6 +1,6 @@
 {
   "name": "idembot",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "*idembot* is a *bot* to perform *idempotent* actions on GitHub issues and pull requests.",
   "main": "bin/index.js",
   "scripts": {
