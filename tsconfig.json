@@ -5,7 +5,7 @@
     "compilerOptions": {
         "outDir": "bin",
         "module": "commonjs",
-        "target": "esnext",
+        "target": "es6",
         "lib": ["es2017"],
         "strict": true,
         "noUnusedLocals": true,
