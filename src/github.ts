@@ -640,8 +640,8 @@ function createPool<
     KeyType
 >(settings: PoolSettings<KeyType, DataType, InstanceType>): Pool<KeyType, DataType, InstanceType> {
     const pool = new WeakStringMap<InstanceType>();
-    const keyToString = settings.keyToString || ((k: any) => k);
-    const keyToCacheKey = settings.keyToCacheKey || ((k: any) => k);
+    const keyToString = settings.keyToString || <never>((k: any) => k);
+    const keyToCacheKey = settings.keyToCacheKey || <never>((k: any) => k);
 
     return {
         async fromKey(key: KeyType): Promise<InstanceType> {

@@ -36,6 +36,6 @@
   },
   "devDependencies": {
     "tslint": "latest",
-    "typescript": "next"
+    "typescript": "^2.7.0-dev.20171031"
   }
 }
