@@ -64,28 +64,28 @@ export default function bot(setup: SetupOptions, opts: ParsedCommandLineOptions,
             if (setup.rules.issues && !pr) {
                 for (const ruleName of Object.keys(setup.rules.issues)) {
                     await runRule(issue, setup.rules.issues[ruleName], ruleName);
+                    await runActions(info, opts);
                 }
             }
             if (setup.rules.pullRequests && pr) {
                 for (const ruleName of Object.keys(setup.rules.pullRequests)) {
                     await runRule(pr, setup.rules.pullRequests[ruleName], ruleName);
+                    await runActions(info, opts);
                 }
             }
             if (setup.rules.issuesAndPullRequests) {
                 for (const ruleName of Object.keys(setup.rules.issuesAndPullRequests)) {
                     await runRule(issue, setup.rules.issuesAndPullRequests[ruleName], ruleName);
+                    await runActions(info, opts);
                 }
             }
-
-            await runActions(info, opts);
         } else if (opts.kind === "queries") {
             for (const query of opts.queries) {
                 await client.runQuery(query, async (item) => {
                     await runRulesOn(item, setup);
+                    await runActions(info, opts);
                 });
             }
-
-            await runActions(info, opts);
         } else {
             throw new Error("Unreachable?");
         }
