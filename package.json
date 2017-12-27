@@ -26,16 +26,16 @@
   },
   "homepage": "https://github.com/RyanCavanaugh/idembot#readme",
   "dependencies": {
-    "@types/commander": "^2.9.1",
-    "@types/fs-extra": "^4.0.0",
-    "@types/node": "^8.0.22",
-    "commander": "^2.11.0",
-    "fs-extra": "^4.0.1",
-    "moment": "^2.18.1",
+    "@types/commander": "^2.12.2",
+    "@types/fs-extra": "^4.0.7",
+    "@types/node": "^8.5.2",
+    "commander": "^2.12.2",
+    "fs-extra": "^4.0.3",
+    "moment": "^2.20.1",
     "sleep-promise": "^2.0.0"
   },
   "devDependencies": {
     "tslint": "latest",
-    "typescript": "^2.7.0-dev.20171031"
+    "typescript": "^2.7.0-insiders.20171214"
   }
 }
