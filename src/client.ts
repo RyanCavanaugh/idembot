@@ -344,8 +344,8 @@ export async function exec(
     return new Promise<string>((resolve, reject) => {
         const req = https.request({ method, path, headers, hostname }, (res) => {
             // console.log('Headers: ' + JSON.stringify(res.headers, undefined, 2));
-            lastRateLimit = parseIntFromHeader(res.headers["x-ratelimit-limit"]);
-            lastRateLimitRemaining = parseIntFromHeader(res.headers["x-ratelimit-remaining"]);
+            lastRateLimit = parseIntFromHeader(res.headers["x-ratelimit-limit"]!);
+            lastRateLimitRemaining = parseIntFromHeader(res.headers["x-ratelimit-remaining"]!);
             const { statusCode } = res;
             if (statusCode === undefined) {
                 throw new Error();
