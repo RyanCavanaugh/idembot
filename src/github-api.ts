@@ -192,6 +192,7 @@ export interface CombinedStatus {
     state: StatusSummary;
     sha: string;
     total_count: number;
+    statuses: CommitStatusesElement[];
 }
 
 // e.g., from:
