@@ -150,11 +150,11 @@ export namespace Labels {
 }
 
 export namespace Comments {
-    interface CommentHeader {
+    export interface CommentHeader {
         slug: string;
-
     }
-    function parseHeader(body: string): CommentHeader | undefined {
+    
+    export function parseHeader(body: string): CommentHeader | undefined {
         const regex = /^<!--header (.*) headerend-->/g;
         const match = regex.exec(body);
         return match ? JSON.parse(match[1]) : undefined;
@@ -172,13 +172,13 @@ export namespace Comments {
         return makeHeader({ slug }) + "\r\n" + body + "\r\n" + makeFooter();
     }
 
-    function getBody(comment: IssueComment): string {
-        const regex = /headerend-->\r?\n(.*)\r?\n<!--footer/;
+    function getBody(comment: IssueComment): string | undefined {
+        const regex = /headerend-->\r\n([^]*?)\r\n<!--footer/;
         const match = regex.exec(comment.body);
         if (match) {
             return match[1];
         }
-        return comment.body;
+        return undefined;
     }
 
     export abstract class Base extends BaseIssueAction {
@@ -186,6 +186,7 @@ export namespace Comments {
             super(issue);
         }
     }
+
     export class Add extends Base {
         constructor(issue: IssueOrPullRequest, slug: string, readonly body: string) {
             super(issue, slug);
@@ -203,8 +204,7 @@ export namespace Comments {
                 if (header && (header.slug === this.slug)) {
                     const body = getBody(c);
                     if (body !== this.body) {
-                        console.log("Actual: " + body);
-                        console.log("Desired: " + this.body);
+                        debugger;
                         await this.fireOnBeforeChange();
                         await client.editComment(c, makeComment(this.slug, this.body));
                         await this.fireOnChanged();
