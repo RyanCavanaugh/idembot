@@ -204,7 +204,6 @@ export namespace Comments {
                 if (header && (header.slug === this.slug)) {
                     const body = getBody(c);
                     if (body !== this.body) {
-                        debugger;
                         await this.fireOnBeforeChange();
                         await client.editComment(c, makeComment(this.slug, this.body));
                         await this.fireOnChanged();
